@@ -47,3 +47,10 @@ async def check_redis() -> str:
         return "error"
     finally:
         await client.aclose()
+
+
+def check_storage() -> str:
+    """探测本地存储目录是否可写。"""
+    from app.storage import get_storage
+
+    return get_storage().check_writable()

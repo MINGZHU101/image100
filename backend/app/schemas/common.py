@@ -9,3 +9,4 @@ class HealthResponse(BaseModel):
     status: str = Field(description="ok 表示全部正常，degraded 表示有依赖异常")
     postgres: str = Field(description="ok 或 error")
     redis: str = Field(description="ok 或 error")
+    storage: str = Field(description="ok 或 error")

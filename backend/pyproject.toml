@@ -11,6 +11,9 @@ dependencies = [
     "asyncpg",
     "redis",
     "httpx",
+    "alembic",
+    "python-multipart",
+    "pillow",
 ]
 
 [build-system]

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getHealth, type HealthResponse } from '../api/client'
+import { ImageUpload } from '../components/ImageUpload'
 
 type LoadState = 'loading' | 'ready' | 'failed'
 
-/** 落地页：产品介绍 + 后端 health 状态 */
+/** 落地页：产品介绍 + health + 上传入口 */
 export function LandingPage() {
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [health, setHealth] = useState<HealthResponse | null>(null)
@@ -44,6 +45,8 @@ export function LandingPage() {
         面向中小电商卖家的自然语言修图工作台——上传商品图，用一句话说清想要的视觉效果。
       </p>
 
+      <ImageUpload />
+
       <section className="health" aria-live="polite">
         <h2>系统状态</h2>
         {loadState === 'loading' && <p className="muted">正在检测后端连通性…</p>}
@@ -63,6 +66,10 @@ export function LandingPage() {
             <li>
               <span>Redis</span>
               <StatusBadge value={health.redis} />
+            </li>
+            <li>
+              <span>Storage</span>
+              <StatusBadge value={health.storage ?? '—'} />
             </li>
           </ul>
         )}
