@@ -24,15 +24,23 @@ async def invoke_tool(
     session_id: UUID,
     tool_name: str,
     params: dict,
+    *,
+    source: str = "ui",
 ) -> ToolInvokeOut:
-    """创建 ToolRun 并入队，立即返回 run_id。"""
+    """创建 ToolRun 并入队，立即返回 run_id。source=ui|agent。"""
     edit_session = await session.get(EditSession, session_id)
     if edit_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
     tool = get_tool(tool_name)
-    if tool is None or not tool.ui_exposed:
+    if tool is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="工具不存在")
+    if source == "agent":
+        if not tool.agent_exposed:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="工具不可用于 Agent")
+    elif not tool.ui_exposed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="工具不存在")
+
 
     # 用 params_model 校验并规范化参数
     try:

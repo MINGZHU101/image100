@@ -20,3 +20,9 @@ def get_tool(name: str) -> ToolSpec | None:
 
 def list_ui_tools() -> list[ToolSpec]:
     return [item for item in get_registry().values() if item.ui_exposed]
+
+
+def list_agent_tools() -> list[ToolSpec]:
+    """Agent 可绑定的工具（与 UI 共用 Registry）。"""
+    return [item for item in get_registry().values() if item.agent_exposed]
+

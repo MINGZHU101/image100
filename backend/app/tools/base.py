@@ -24,5 +24,8 @@ class ToolSpec:
     handler: ToolHandler
     # 是否在工具栏展示
     ui_exposed: bool = True
+    # 是否允许 Agent 规划调用
+    agent_exposed: bool = True
     # 是否走 ARQ 队列（导出等可同步）
     queued: bool = True
+

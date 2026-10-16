@@ -26,6 +26,21 @@ async def enqueue_tool_run(run_id: UUID) -> str:
         if job is None:
             raise RuntimeError("入队失败：返回空 job")
         return job.job_id
+    finally:
+        await redis.aclose()
 
+
+async def enqueue_agent_plan(agent_run_id: UUID) -> str:
+    """将 Agent 计划串行执行任务入队。"""
+    redis = await create_pool(_redis_settings())
+    try:
+        job = await redis.enqueue_job(
+            "execute_agent_plan",
+            str(agent_run_id),
+            _job_id=f"agent-{agent_run_id}",
+        )
+        if job is None:
+            raise RuntimeError("计划入队失败：返回空 job")
+        return job.job_id
     finally:
         await redis.aclose()

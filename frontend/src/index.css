@@ -223,10 +223,144 @@ body {
   transition: width 0.2s ease;
 }
 
+.editor-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 320px);
+  gap: 0.75rem;
+  min-height: 60vh;
+}
+
+@media (max-width: 900px) {
+  .editor-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .canvas-wrap {
   flex: 1;
   min-height: 60vh;
   border: 1px solid var(--line);
   background: #dfe6ee;
   overflow: hidden;
+}
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0.75rem;
+  min-height: 60vh;
+}
+
+.agent-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.agent-panel-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.planner-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.planner-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #f7f9fb;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.planner-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.planner-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.agent-messages {
+  flex: 1;
+  overflow: auto;
+  margin-bottom: 0.75rem;
+}
+
+.agent-bubble {
+  padding: 0.6rem 0.7rem;
+  background: #f3f6f9;
+  margin-bottom: 0.6rem;
+}
+
+.agent-goal,
+.agent-reply {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.plan-card {
+  border: 1px solid var(--line);
+  padding: 0.65rem 0.7rem;
+  margin-bottom: 0.6rem;
+}
+
+.plan-card-title {
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.plan-card-reply {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.plan-steps {
+  margin: 0 0 0.65rem;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.plan-step-params {
+  font-size: 0.8rem;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.agent-composer textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
 }

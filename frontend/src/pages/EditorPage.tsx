@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSession, type SessionOut } from '../api/sessions'
+import { AgentConversation } from '../components/editor/AgentConversation'
 import { CanvasStage } from '../components/editor/CanvasStage'
 import { EditorToolbar } from '../components/editor/EditorToolbar'
 import { ProgressBar } from '../components/editor/ProgressBar'
+import { useAgent } from '../hooks/useAgent'
 import { useToolRun } from '../hooks/useToolRun'
 
-/** 编辑器页：工具栏 + 进度 + 画布 + 导出 */
+/** 编辑器页：工具栏 + Agent 对话 + 画布 */
 export function EditorPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const [session, setSession] = useState<SessionOut | null>(null)
@@ -63,11 +65,17 @@ export function EditorPage() {
     onCompleted,
   })
 
+  const agent = useAgent({
+    sessionId: sessionId ?? '',
+    onCompleted,
+  })
+
   const mainLayer = session?.document.layers.find((layer) => layer.visible) ?? null
-  // 附带时间戳，避免浏览器缓存旧图
   const imageUrl = mainLayer
     ? `/api/assets/${mainLayer.asset_id}/file?t=${session?.updated_at ?? ''}`
     : ''
+
+  const toolsBusy = running || agent.busy
 
   return (
     <div className="editor-page">
@@ -84,7 +92,7 @@ export function EditorPage() {
       {sessionId && !loading && !error && session && (
         <EditorToolbar
           sessionId={sessionId}
-          disabled={running}
+          disabled={toolsBusy}
           onRunTool={(name, params) => {
             void runTool(name, params)
           }}
@@ -97,12 +105,31 @@ export function EditorPage() {
       {loading && <p className="muted">正在加载会话…</p>}
       {error && <p className="status-error">{error}</p>}
 
-      {!loading && !error && session && mainLayer && (
-        <CanvasStage
-          imageUrl={imageUrl}
-          canvasWidth={session.document.canvas.width}
-          canvasHeight={session.document.canvas.height}
-        />
+      {!loading && !error && session && mainLayer && sessionId && (
+        <div className="editor-body">
+          <CanvasStage
+            imageUrl={imageUrl}
+            canvasWidth={session.document.canvas.width}
+            canvasHeight={session.document.canvas.height}
+          />
+          <AgentConversation
+            provider={agent.provider}
+            dashscopeAvailable={agent.dashscopeAvailable}
+            busy={agent.busy}
+            error={agent.error}
+            current={agent.current}
+            onProviderChange={agent.setProvider}
+            onSubmit={(goal) => {
+              void agent.submitGoal(goal)
+            }}
+            onConfirm={() => {
+              void agent.confirm()
+            }}
+            onCancel={() => {
+              void agent.cancel()
+            }}
+          />
+        </div>
       )}
     </div>
   )

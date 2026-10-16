@@ -15,6 +15,9 @@ dependencies = [
     "python-multipart",
     "pillow",
     "arq",
+    "langgraph",
+    "langchain-core",
+    "langchain-openai",
 ]
 
 [build-system]

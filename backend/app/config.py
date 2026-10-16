@@ -47,7 +47,14 @@ class Settings(BaseSettings):
     # v3：去背策略 mock | rembg（本期仅实现 mock）
     matting_provider: str = "mock"
 
+    # v4：规划器默认 dashscope（有 Key）；前端可按次覆盖为 mock
+    planner_provider: str = "dashscope"
+    dashscope_api_key: str = ""
+    dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    planner_model: str = "qwen-plus"
+
     @field_validator("cors_origins", mode="before")
+
     @classmethod
     def split_cors_origins(cls, value: object) -> object:
         """支持环境变量写成逗号分隔字符串。"""
