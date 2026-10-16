@@ -44,3 +44,19 @@ async def enqueue_agent_plan(agent_run_id: UUID) -> str:
         return job.job_id
     finally:
         await redis.aclose()
+
+
+async def enqueue_generation(generation_id: UUID) -> str:
+    """将文生图任务入队。"""
+    redis = await create_pool(_redis_settings())
+    try:
+        job = await redis.enqueue_job(
+            "execute_generation",
+            str(generation_id),
+            _job_id=f"gen-{generation_id}",
+        )
+        if job is None:
+            raise RuntimeError("生图入队失败：返回空 job")
+        return job.job_id
+    finally:
+        await redis.aclose()

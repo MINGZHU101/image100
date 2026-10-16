@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     planner_model: str = "qwen-plus"
 
+    # v5：文生图默认 dashscope；前端可按次覆盖为 mock
+    image_provider: str = "dashscope"
+    text_to_image_model: str = "qwen-image-3.0-pro"
+    # 文生图走 DashScope 原生多模态接口，与规划器的 compatible-mode 分开
+    dashscope_image_url: str = (
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    )
+
     @field_validator("cors_origins", mode="before")
 
     @classmethod

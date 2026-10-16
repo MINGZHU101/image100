@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getHealth, type HealthResponse } from '../api/client'
 import { ImageUpload } from '../components/ImageUpload'
 
@@ -46,6 +47,11 @@ export function LandingPage() {
       </p>
 
       <ImageUpload />
+      <p className="create-entry">
+        <Link to="/create" className="tool-btn">
+          AI 创作（文生图）
+        </Link>
+      </p>
 
       <section className="health" aria-live="polite">
         <h2>系统状态</h2>

@@ -2,7 +2,7 @@
 
 面向中小电商卖家 / 运营的「自然语言电商修图工作台」。
 
-当前版本：**v4.0.0（Agent 计划 + 确认执行）** — 自然语言 → 计划卡片 → 确认 → 串行执行 v3 工具。
+当前版本：**v5（文生图创作页）** — 创作页生成候选图，选一张进入编辑器精修。
 
 ## 技术栈
 
@@ -33,6 +33,8 @@ MATTING_PROVIDER=mock
 PLANNER_PROVIDER=dashscope
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 PLANNER_MODEL=qwen-plus
+IMAGE_PROVIDER=dashscope
+TEXT_TO_IMAGE_MODEL=qwen-image-3.0-pro
 # DASHSCOPE_API_KEY 建议放系统环境变量，勿提交仓库
 ```
 

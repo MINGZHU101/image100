@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from app.deps import DbDep
 from app.events import subscribe_events
+from app.models.generation_run import GenerationRun
 from app.models.tool_run import ToolRun
 
 router = APIRouter(tags=["events"])
@@ -21,12 +22,30 @@ async def stream_run_events(run_id: UUID, db: DbDep) -> StreamingResponse:
     若 run 已结束，立即推送终态并关闭；否则订阅 Redis 直到 completed/error。
     """
     run = await db.get(ToolRun, run_id)
-    if run is None:
+    generation = None if run is not None else await db.get(GenerationRun, run_id)
+    if run is None and generation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="运行不存在")
 
 
     async def event_generator():
-        # 已结束：直接回放终态，避免错过事件
+        # 文生图终态回放
+        if generation is not None and generation.status in ("succeeded", "failed"):
+            if generation.status == "succeeded":
+                yield _sse(
+                    "completed",
+                    {
+                        "run_id": str(generation.id),
+                        "asset_ids": [str(item) for item in (generation.result_asset_ids or [])],
+                    },
+                )
+            else:
+                yield _sse(
+                    "error",
+                    {"run_id": str(generation.id), "message": generation.error or "failed"},
+                )
+            return
+
+        # 工具运行终态回放
         if run is not None and run.status in ("succeeded", "failed"):
             if run.status == "succeeded":
                 payload = {
