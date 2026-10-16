@@ -17,6 +17,8 @@ export function CanvasStage({ imageUrl, canvasWidth, canvasHeight }: CanvasStage
   const [scale, setScale] = useState(1)
 
   useEffect(() => {
+    // URL 变化时先清空，避免短暂显示旧图
+    setImage(null)
     const img = new window.Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => setImage(img)

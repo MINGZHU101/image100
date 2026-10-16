@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     local_storage_dir: str = "./data"
     upload_max_bytes: int = 10 * 1024 * 1024
 
+    # v3：去背策略 mock | rembg（本期仅实现 mock）
+    matting_provider: str = "mock"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors_origins(cls, value: object) -> object:
