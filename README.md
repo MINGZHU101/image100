@@ -97,4 +97,4 @@ API 文档：http://127.0.0.1:7302/api/docs
 | PostgreSQL | 7311 |
 | Redis | 7312 |
 
-分支：`version6`，标签：`v6.0.0`（打 tag 前以实际提交为准）
+分支：`version6`，标签：`v6.0.0`
