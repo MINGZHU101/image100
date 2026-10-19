@@ -1,152 +1,73 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  cancelAgentRun,
-  confirmAgentRun,
-  createAgentRun,
-  getAgentRun,
-  getPlannerOptions,
-  type AgentRunOut,
-  type PlannerProvider,
-} from '../api/agent'
+import { useEffect, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-interface UseAgentOptions {
-  sessionId: string
-  onCompleted: () => void | Promise<void>
+import { agentApi } from '@/api/agent'
+import { isTerminal } from '@/api/runs'
+
+const turnsKey = (sessionId: string) => ['session', sessionId, 'messages']
+
+function useRefreshTurn(sessionId: string) {
+  const queryClient = useQueryClient()
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: turnsKey(sessionId) })
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId, 'history'] })
+  }
 }
 
-/** Agent 规划态：规划 → 确认 → 轮询直到 done/failed */
-export function useAgent({ sessionId, onCompleted }: UseAgentOptions) {
-  const [provider, setProvider] = useState<PlannerProvider>('dashscope')
-  const [dashscopeAvailable, setDashscopeAvailable] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [current, setCurrent] = useState<AgentRunOut | null>(null)
-  const pollRef = useRef<number | null>(null)
+export function useTurns(sessionId: string) {
+  const queryClient = useQueryClient()
+  const query = useQuery({
+    queryKey: turnsKey(sessionId),
+    queryFn: () => agentApi.turns(sessionId),
+    // 第一步 SSE 结束时下一步可能还没写进计划，整轮 running 时接着拉，避免卡片停在「等待中」
+    refetchInterval: (current) =>
+      current.state.data?.at(-1)?.status === 'running' ? 800 : false,
+  })
+
+  const latest = query.data?.at(-1)?.status
+  const previous = useRef(latest)
+  useEffect(() => {
+    const wasRunning = previous.current === 'running'
+    previous.current = latest
+    if (!wasRunning || !latest || !isTerminal(latest)) return
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId, 'history'] })
+  }, [latest, sessionId, queryClient])
 
   useEffect(() => {
-    let cancelled = false
-    void getPlannerOptions()
-      .then((options) => {
-        if (cancelled) {
-          return
-        }
-        setDashscopeAvailable(options.dashscope_available)
-        const initial =
-          options.default_provider === 'dashscope' && !options.dashscope_available
-            ? 'mock'
-            : options.default_provider
-        setProvider(initial)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setProvider('mock')
-          setDashscopeAvailable(false)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    previous.current = undefined
+  }, [sessionId])
 
-  const stopPoll = useCallback(() => {
-    if (pollRef.current !== null) {
-      window.clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
+  return query
+}
 
-  useEffect(() => () => stopPoll(), [stopPoll])
+export function useSendMessage(sessionId: string) {
+  const refresh = useRefreshTurn(sessionId)
+  return useMutation({
+    mutationFn: (text: string) => agentApi.send(sessionId, text),
+    onSuccess: refresh,
+  })
+}
 
-  const startPoll = useCallback(
-    (agentRunId: string) => {
-      stopPoll()
-      pollRef.current = window.setInterval(() => {
-        void getAgentRun(sessionId, agentRunId)
-          .then(async (data) => {
-            setCurrent(data)
-            if (data.status === 'done') {
-              stopPoll()
-              setBusy(false)
-              await onCompleted()
-            } else if (data.status === 'failed' || data.status === 'cancelled') {
-              stopPoll()
-              setBusy(false)
-              if (data.error) {
-                setError(data.error)
-              }
-            }
-          })
-          .catch((err) => {
-            stopPoll()
-            setBusy(false)
-            setError(err instanceof Error ? err.message : '轮询失败')
-          })
-      }, 800)
-    },
-    [sessionId, onCompleted, stopPoll],
-  )
-
-  const submitGoal = useCallback(
-    async (goal: string) => {
-      if (!goal.trim() || busy) {
-        return
-      }
-      setError('')
-      setBusy(true)
-      setCurrent(null)
-      stopPoll()
-      try {
-        const data = await createAgentRun(sessionId, goal.trim(), provider)
-        setCurrent(data)
-        setBusy(false)
-        if (data.status === 'failed') {
-          setError(data.error || data.reply || '规划失败')
-        }
-      } catch (err) {
-        setBusy(false)
-        setError(err instanceof Error ? err.message : '规划失败')
-      }
-    },
-    [sessionId, provider, busy, stopPoll],
-  )
-
-  const confirm = useCallback(async () => {
-    if (!current || current.status !== 'planned' || busy) {
-      return
-    }
-    setError('')
-    setBusy(true)
-    try {
-      await confirmAgentRun(sessionId, current.id)
-      startPoll(current.id)
-    } catch (err) {
-      setBusy(false)
-      setError(err instanceof Error ? err.message : '确认失败')
-    }
-  }, [current, busy, sessionId, startPoll])
-
-  const cancel = useCallback(async () => {
-    if (!current || current.status !== 'planned') {
-      return
-    }
-    setError('')
-    try {
-      const data = await cancelAgentRun(sessionId, current.id)
-      setCurrent(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '取消失败')
-    }
-  }, [current, sessionId])
-
+export function usePlanActions(sessionId: string) {
+  const refresh = useRefreshTurn(sessionId)
+  const confirm = useMutation({
+    mutationFn: (turnId: string) => agentApi.confirm(sessionId, turnId),
+    onSuccess: refresh,
+  })
+  const cancel = useMutation({
+    mutationFn: (turnId: string) => agentApi.cancel(sessionId, turnId),
+    onSuccess: refresh,
+  })
+  const retry = useMutation({
+    mutationFn: (turnId: string) => agentApi.retry(sessionId, turnId),
+    onSuccess: refresh,
+  })
   return {
-    provider,
-    setProvider,
-    dashscopeAvailable,
-    busy,
-    error,
-    current,
-    submitGoal,
-    confirm,
-    cancel,
+    confirm: (turnId: string) => confirm.mutate(turnId),
+    cancel: (turnId: string) => cancel.mutate(turnId),
+    retry: (turnId: string) => retry.mutate(turnId),
+    busy: confirm.isPending || cancel.isPending || retry.isPending,
   }
 }

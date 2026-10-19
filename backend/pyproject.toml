@@ -18,6 +18,7 @@ dependencies = [
     "langgraph",
     "langchain-core",
     "langchain-openai",
+    "cos-python-sdk-v5",
 ]
 
 [build-system]

@@ -1,39 +1,63 @@
-/** 资产相关 API */
+import { ApiError, apiError } from '@/api/client'
 
-export interface AssetOut {
+export type AssetKind =
+  | 'original'
+  | 'generated'
+  | 'subject'
+  | 'background'
+  | 'mask'
+  | 'marketing'
+  | 'export'
+
+export type Asset = {
   id: string
-  storage_key: string
+  kind: AssetKind
+  source: 'upload' | 'generate' | 'tool'
+  image_format: string
   width: number
   height: number
-  mime: string
+  size_bytes: number
+  has_alpha: boolean
   created_at: string
-  file_url: string
+  url: string
 }
 
-export interface AssetListOut {
-  items: AssetOut[]
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+export type LibraryGroup = {
+  session_id: string | null
+  title: string
+  updated_at: string
+  cover: Asset
+  assets: Asset[]
 }
 
-/** multipart 上传商品图，字段名 file */
-export async function uploadAsset(file: File): Promise<AssetOut> {
-  const form = new FormData()
-  form.append('file', file)
-  const response = await fetch('/api/assets', {
-    method: 'POST',
-    body: form,
-  })
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`上传失败：${response.status} ${text}`)
-  }
-  return response.json() as Promise<AssetOut>
-}
+export const assetsApi = {
+  async upload(file: File): Promise<Asset> {
+    const body = new FormData()
+    body.append('file', file)
 
-export async function listAssets(): Promise<AssetOut[]> {
-  const response = await fetch('/api/assets')
-  if (!response.ok) {
-    throw new Error(`拉取资产列表失败：HTTP ${response.status}`)
-  }
-  const data = (await response.json()) as AssetListOut
-  return data.items
+    const response = await fetch('/api/assets', {
+      method: 'POST',
+      body,
+      credentials: 'include',
+    })
+    if (!response.ok) throw await apiError(response, '上传失败')
+    return response.json()
+  },
+
+  async list(limit = 50): Promise<Asset[]> {
+    const response = await fetch(`/api/assets?limit=${limit}`, { credentials: 'include' })
+    if (!response.ok) throw new ApiError(response.status, '读取素材失败')
+    return response.json()
+  },
+
+  async library(limit = 50): Promise<LibraryGroup[]> {
+    const response = await fetch(`/api/assets/library?limit=${limit}`, {
+      credentials: 'include',
+    })
+    if (!response.ok) throw new ApiError(response.status, '读取素材失败')
+    return response.json()
+  },
 }

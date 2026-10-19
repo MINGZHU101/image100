@@ -91,3 +91,50 @@ async def get_run(session: AsyncSession, run_id: UUID) -> RunOut:
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="运行不存在")
     return RunOut.model_validate(run)
+
+
+async def get_run_compat(session: AsyncSession, run_id: UUID) -> dict:
+    """工具运行或文生图 → 原仓 Run 形状。"""
+    from app.compat.session_detail import to_frontend_asset
+    from app.models.asset import Asset
+    from app.models.generation_run import GenerationRun
+    from app.services.assets import to_asset_out
+
+    run = await session.get(ToolRun, run_id)
+    if run is not None:
+        return {
+            "id": str(run.id),
+            "tool": run.tool_name,
+            "status": run.status,
+            "progress": run.progress,
+            "stage": "",
+            "error": run.error,
+            "prompt": None,
+            "candidates": [],
+            "result": {"asset_id": str(run.result_asset_id)} if run.result_asset_id else {},
+        }
+
+    generation = await session.get(GenerationRun, run_id)
+    if generation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="运行不存在")
+
+    candidates = []
+    for raw_id in generation.result_asset_ids or []:
+        try:
+            asset = await session.get(Asset, UUID(str(raw_id)))
+        except ValueError:
+            continue
+        if asset is not None:
+            candidates.append(to_frontend_asset(to_asset_out(asset)))
+
+    return {
+        "id": str(generation.id),
+        "tool": "generate_image",
+        "status": generation.status,
+        "progress": generation.progress,
+        "stage": "",
+        "error": generation.error,
+        "prompt": generation.prompt,
+        "candidates": candidates,
+        "result": {},
+    }

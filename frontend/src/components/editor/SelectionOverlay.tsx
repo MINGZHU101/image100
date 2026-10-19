@@ -1,88 +1,119 @@
-import { Line, Rect } from 'react-konva'
-import {
-  DEFAULT_BRUSH_RADIUS,
-  type CanvasSelection,
-} from '../../types/selection'
+import { useEffect, useRef } from 'react'
+import { Circle, Group, Image as KonvaImage, Layer as KonvaLayer, Line, Text } from 'react-konva'
 
-interface SelectionOverlayProps {
-  canvasWidth: number
-  canvasHeight: number
-  selection: CanvasSelection | null
-  draftPoints: number[][]
-  mode: 'none' | 'rect' | 'brush'
-}
+import type { LayerDocument } from '@/api/sessions'
+import { useCanvasImage } from '@/hooks/useCanvasImage'
+import { brushWidth } from '@/lib/brush'
+import type { CanvasSelection } from '@/stores/editorUi'
 
-const FILL = 'rgba(95, 152, 173, 0.35)'
-const STROKE = '#5f98ad'
-
-/** 选区可视化：已确认选区 + 拖拽中草稿 */
 export function SelectionOverlay({
-  canvasWidth,
-  canvasHeight,
+  document,
   selection,
-  draftPoints,
-  mode,
-}: SelectionOverlayProps) {
-  const brushPx = Math.max(2, Math.min(canvasWidth, canvasHeight) * DEFAULT_BRUSH_RADIUS)
+  scale,
+  draft,
+  pending = false,
+  preview = null,
+  markers,
+  onMaskReady,
+}: {
+  document: LayerDocument
+  selection: CanvasSelection | null
+  scale: number
+  draft: { x: number; y: number }[]
+  pending?: boolean
+  preview?: HTMLCanvasElement | null
+  markers?: CanvasSelection['markers']
+  onMaskReady?: () => void
+}) {
+  const mask = useCanvasImage(selection?.maskUrl)
+  const maskReady = Boolean(mask && selection && mask.url === selection.maskUrl)
+  const wasReady = useRef(false)
+  const pins = markers ?? selection?.markers ?? []
+
+  useEffect(() => {
+    if (maskReady && !wasReady.current) onMaskReady?.()
+    wasReady.current = maskReady
+  }, [maskReady, onMaskReady])
 
   return (
-    <>
-      {selection?.type === 'rect' && (
-        <Rect
-          x={selection.rect.x * canvasWidth}
-          y={selection.rect.y * canvasHeight}
-          width={selection.rect.width * canvasWidth}
-          height={selection.rect.height * canvasHeight}
-          fill={FILL}
-          stroke={STROKE}
-          strokeWidth={2}
+    <KonvaLayer listening={false}>
+      {mask && (
+        <KonvaImage
+          image={mask.element}
+          width={document.width}
+          height={document.height}
+          // 服务端 mask 已带青色 alpha，这里不再二次压暗到几乎看不见
+          opacity={0.85}
           listening={false}
         />
       )}
-
-      {selection?.type === 'brush' &&
-        selection.strokes.map((stroke, index) => (
-          <Line
-            key={`stroke-${index}`}
-            points={stroke.flatMap(([x, y]) => [x * canvasWidth, y * canvasHeight])}
-            closed={stroke.length > 2}
-            fill={stroke.length > 2 ? FILL : undefined}
-            stroke={STROKE}
-            strokeWidth={brushPx}
-            lineCap="round"
-            lineJoin="round"
-            opacity={0.55}
-            listening={false}
-          />
-        ))}
-
-      {mode === 'rect' && draftPoints.length >= 2 && (
-        <Rect
-          x={Math.min(draftPoints[0][0], draftPoints[1][0]) * canvasWidth}
-          y={Math.min(draftPoints[0][1], draftPoints[1][1]) * canvasHeight}
-          width={Math.abs(draftPoints[1][0] - draftPoints[0][0]) * canvasWidth}
-          height={Math.abs(draftPoints[1][1] - draftPoints[0][1]) * canvasHeight}
-          fill={FILL}
-          stroke={STROKE}
-          strokeWidth={2}
-          dash={[6, 4]}
+      {preview && (
+        <KonvaImage
+          image={preview}
+          width={document.width}
+          height={document.height}
+          opacity={0.45}
           listening={false}
         />
       )}
-
-      {mode === 'brush' && draftPoints.length > 0 && (
+      {draft.length > 1 && pending && (
         <Line
-          points={draftPoints.flatMap(([x, y]) => [x * canvasWidth, y * canvasHeight])}
-          closed={draftPoints.length > 2}
-          fill={draftPoints.length > 2 ? FILL : undefined}
-          stroke={STROKE}
-          strokeWidth={brushPx}
+          points={draft.flatMap((point) => [point.x * document.width, point.y * document.height])}
+          closed={draft.length > 2}
+          fill={draft.length > 2 ? '#5f98ad' : undefined}
+          stroke="#5f98ad"
+          strokeWidth={brushWidth(document)}
           lineCap="round"
           lineJoin="round"
           opacity={0.45}
           listening={false}
         />
       )}
-    </>
+      {pins.map((marker) => (
+        <MarkerBadge
+          key={marker.index}
+          x={marker.x * document.width}
+          y={marker.y * document.height}
+          index={marker.index}
+          scale={scale}
+          pending={!maskReady}
+        />
+      ))}
+    </KonvaLayer>
   )
 }
+
+function MarkerBadge({
+  x,
+  y,
+  index,
+  scale,
+  pending = false,
+}: {
+  x: number
+  y: number
+  index: number
+  scale: number
+  pending?: boolean
+}) {
+  const invert = 1 / scale
+  return (
+    <Group x={x} y={y} scaleX={invert} scaleY={invert} listening={false}>
+      {pending && <Circle radius={17} stroke="#5f98ad" strokeWidth={2} opacity={0.45} />}
+      <Circle radius={11} fill="#5f98ad" shadowColor="#141a14" shadowBlur={8} shadowOpacity={0.35} />
+      <Text
+        text={String(index)}
+        width={22}
+        height={22}
+        offsetX={11}
+        offsetY={11}
+        align="center"
+        verticalAlign="middle"
+        fontSize={11}
+        fontStyle="600"
+        fill="#ffffff"
+      />
+    </Group>
+  )
+}
+

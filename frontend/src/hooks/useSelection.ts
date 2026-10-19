@@ -1,166 +1,114 @@
-import { useCallback, useState } from 'react'
-import {
-  DEFAULT_BRUSH_RADIUS,
-  type BrushSelection,
-  type CanvasSelection,
-  type RectSelection,
-  type SelectionMode,
-} from '../types/selection'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 
-interface UseSelectionResult {
-  mode: SelectionMode
-  selection: CanvasSelection | null
-  draftPoints: number[][]
-  setMode: (mode: SelectionMode) => void
-  beginStroke: (x: number, y: number) => void
-  extendStroke: (x: number, y: number) => void
-  endStroke: () => CanvasSelection | null
-  beginRect: (x: number, y: number) => void
-  updateRect: (x: number, y: number) => void
-  endRect: () => CanvasSelection | null
-  clear: () => void
-  replaceSelection: (next: CanvasSelection | null) => void
-}
+import { sessionsApi, type SelectInput, type Selection } from '@/api/sessions'
+import { errorMessage } from '@/hooks/useAuth'
+import { BRUSH_RADIUS } from '@/lib/brush'
+import { createSelectionHistory, inputsOf, type SelectionEntry } from '@/lib/selectionHistory'
+import { toast } from '@/stores/toasts'
+import { useEditorUi, type CanvasSelection } from '@/stores/editorUi'
 
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value))
-}
-
-/** 选区状态机：矩形替换；笔刷同模式追加并集 */
-export function useSelection(
-  initial: CanvasSelection | null = null,
-): UseSelectionResult {
-  const [mode, setModeState] = useState<SelectionMode>('none')
-  const [selection, setSelection] = useState<CanvasSelection | null>(initial)
-  const [draftPoints, setDraftPoints] = useState<number[][]>([])
-  const [rectOrigin, setRectOrigin] = useState<[number, number] | null>(null)
-
-  const setMode = useCallback((next: SelectionMode) => {
-    setModeState(next)
-    setDraftPoints([])
-    setRectOrigin(null)
-    // 切换工具时重置选区（Q1/Q2）
-    if (next === 'none') {
-      return
-    }
-    setSelection(null)
-  }, [])
-
-  const replaceSelection = useCallback((next: CanvasSelection | null) => {
-    setSelection(next)
-    setDraftPoints([])
-    setRectOrigin(null)
-  }, [])
-
-  const clear = useCallback(() => {
-    setSelection(null)
-    setDraftPoints([])
-    setRectOrigin(null)
-    setModeState('none')
-  }, [])
-
-  const beginStroke = useCallback(
-    (x: number, y: number) => {
-      if (mode !== 'brush') {
-        return
-      }
-      setDraftPoints([[clamp01(x), clamp01(y)]])
-    },
-    [mode],
-  )
-
-  const extendStroke = useCallback(
-    (x: number, y: number) => {
-      if (mode !== 'brush') {
-        return
-      }
-      setDraftPoints((prev) => [...prev, [clamp01(x), clamp01(y)]])
-    },
-    [mode],
-  )
-
-  const endStroke = useCallback((): CanvasSelection | null => {
-    if (mode !== 'brush' || draftPoints.length === 0) {
-      setDraftPoints([])
-      return selection
-    }
-    const prevStrokes =
-      selection?.type === 'brush' ? selection.strokes : []
-    const next: BrushSelection = {
-      type: 'brush',
-      strokes: [...prevStrokes, draftPoints],
-      brush_radius: DEFAULT_BRUSH_RADIUS,
-      feather: 0,
-    }
-    setSelection(next)
-    setDraftPoints([])
-    return next
-  }, [mode, draftPoints, selection])
-
-  const beginRect = useCallback(
-    (x: number, y: number) => {
-      if (mode !== 'rect') {
-        return
-      }
-      const nx = clamp01(x)
-      const ny = clamp01(y)
-      setRectOrigin([nx, ny])
-      setDraftPoints([
-        [nx, ny],
-        [nx, ny],
-      ])
-    },
-    [mode],
-  )
-
-  const updateRect = useCallback(
-    (x: number, y: number) => {
-      if (mode !== 'rect' || !rectOrigin) {
-        return
-      }
-      setDraftPoints([rectOrigin, [clamp01(x), clamp01(y)]])
-    },
-    [mode, rectOrigin],
-  )
-
-  const endRect = useCallback((): CanvasSelection | null => {
-    if (mode !== 'rect' || !rectOrigin || draftPoints.length < 2) {
-      setDraftPoints([])
-      setRectOrigin(null)
-      return selection
-    }
-    const [x0, y0] = rectOrigin
-    const [x1, y1] = draftPoints[1]
-    const left = Math.min(x0, x1)
-    const top = Math.min(y0, y1)
-    const width = Math.abs(x1 - x0)
-    const height = Math.abs(y1 - y0)
-    setDraftPoints([])
-    setRectOrigin(null)
-    if (width < 0.005 || height < 0.005) {
-      return selection
-    }
-    const next: RectSelection = {
-      type: 'rect',
-      rect: { x: left, y: top, width, height },
-      feather: 0,
-    }
-    setSelection(next)
-    return next
-  }, [mode, rectOrigin, draftPoints, selection])
-
+function toCanvas(selection: Selection): CanvasSelection {
   return {
-    mode,
-    selection,
-    draftPoints,
-    setMode,
-    beginStroke,
-    extendStroke,
-    endStroke,
-    beginRect,
-    updateRect,
-    endRect,
-    clear,
-    replaceSelection,
+    revision: selection.revision,
+    maskId: selection.mask.id,
+    maskUrl: selection.mask.url,
+    markers: selection.markers,
   }
 }
+
+function entryOf(input: SelectInput): SelectionEntry | null {
+  if (input.strokes?.[0]) return { kind: 'stroke', points: input.strokes[0] }
+  if (input.points?.[0]) return { kind: 'point', point: input.points[0] }
+  return null
+}
+
+export function useSelection(sessionId: string, revision: number) {
+  const setSelection = useEditorUi((state) => state.setSelection)
+  const dropStaleSelection = useEditorUi((state) => state.dropStaleSelection)
+  const selection = useEditorUi((state) => state.selection)
+  const history = useRef(createSelectionHistory())
+  const [, bump] = useState(0)
+  const touch = () => bump((value) => value + 1)
+
+  useEffect(() => {
+    dropStaleSelection(revision)
+    history.current.reset()
+    touch()
+  }, [revision, dropStaleSelection])
+
+  const selectMode = useEditorUi((state) => state.selectMode)
+
+  useEffect(() => {
+    if (selectMode !== 'point') return
+    void sessionsApi.prepareSelection(sessionId).catch(() => undefined)
+  }, [selectMode, sessionId, revision])
+
+  const select = useMutation({
+    mutationFn: (input: SelectInput) => sessionsApi.select(sessionId, input),
+    onSuccess: (body, input) => {
+      const entry = entryOf(input)
+      if (entry) history.current.commit(entry)
+      setSelection(toCanvas(body))
+      touch()
+    },
+    onError: (error) => toast(errorMessage(error), 'danger'),
+  })
+
+  const clear = useMutation({
+    mutationFn: () => sessionsApi.clearSelection(sessionId),
+    onSuccess: () => {
+      history.current.clear()
+      setSelection(null)
+      touch()
+    },
+    onError: (error) => toast(errorMessage(error), 'danger'),
+  })
+
+  const replay = useMutation({
+    mutationFn: async (entries: SelectionEntry[]) => {
+      await sessionsApi.clearSelection(sessionId)
+      if (!entries.length) return null
+      const { strokes, points } = inputsOf(entries)
+      let body: Selection | null = null
+      if (points.length) {
+        body = await sessionsApi.select(sessionId, { revision, points, append: false })
+      }
+      if (strokes.length) {
+        body = await sessionsApi.select(sessionId, { revision, strokes, radius: BRUSH_RADIUS })
+      }
+      return body
+    },
+    onSuccess: (body) => setSelection(body ? toCanvas(body) : null),
+    onError: (error) => toast(errorMessage(error), 'danger'),
+    onSettled: touch,
+  })
+
+  const busy = select.isPending || clear.isPending || replay.isPending
+
+  return {
+    selection,
+    busy,
+    canUndo: history.current.canUndo(),
+    canRedo: history.current.canRedo(),
+    addPoint: (x: number, y: number) =>
+      select.mutate({
+        revision,
+        points: [{ x, y }],
+        append: Boolean(selection && selection.revision === revision),
+      }),
+    addStroke: (points: { x: number; y: number }[]) =>
+      select.mutate({ revision, strokes: [points], radius: BRUSH_RADIUS }),
+    clear: () => clear.mutate(),
+    undo: () => {
+      const next = history.current.undo()
+      if (next !== null) replay.mutate(next)
+    },
+    redo: () => {
+      const next = history.current.redo()
+      if (next !== null) replay.mutate(next)
+    },
+  }
+}
+
+export type SessionSelection = ReturnType<typeof useSelection>

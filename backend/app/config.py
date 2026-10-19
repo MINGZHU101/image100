@@ -39,10 +39,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:7301",
     ]
 
-    # v2：本地存储
-    storage_backend: str = "local"
+    # v8：默认腾讯云 COS；可改 local 回退本机磁盘
+    storage_backend: str = "cos"
     local_storage_dir: str = "./data"
     upload_max_bytes: int = 10 * 1024 * 1024
+    cos_secret_id: str = ""
+    cos_secret_key: str = ""
+    cos_region: str = "ap-guangzhou"
+    cos_bucket: str = ""
+    cos_public_base_url: str = ""
 
     # v3：去背策略 mock | rembg（本期仅实现 mock）
     matting_provider: str = "mock"

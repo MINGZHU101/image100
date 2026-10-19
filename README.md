@@ -2,16 +2,16 @@
 
 面向中小电商卖家 / 运营的「自然语言电商修图工作台」。
 
-当前版本：**v7（图层）** — 拆成背景/主体两层，图层面板显隐与选中后按层修图。
+当前版本：**v8（原仓前端 + 接口对齐 + COS）** — 迁入原仓前端 UI，已实现后端契约对齐并接通主路径；支持腾讯云 COS。
 
 ## 技术栈
 
 | 层 | 技术 |
 |----|------|
-| 后端 | Python 3.13、FastAPI、SQLAlchemy(async)、Alembic、asyncpg、redis、Pillow、ARQ、**LangGraph + langchain-core/openai** |
-| 前端 | React 19、Vite、TypeScript、react-router-dom、Konva |
+| 后端 | Python 3.13、FastAPI、SQLAlchemy(async)、Alembic、asyncpg、redis、Pillow、ARQ、LangGraph、**cos-python-sdk-v5** |
+| 前端 | React 19、Vite、TypeScript、Tailwind、TanStack Query、Zustand、Konva（原仓 UI） |
 | 中间件 | 虚拟机 Docker：PostgreSQL `7311`、Redis `7312` |
-| 存储 | 本地磁盘 `./data` |
+| 存储 | 默认腾讯云 COS（`STORAGE_BACKEND=cos`）；可改 `local` 回退 |
 
 ## 配置环境变量
 
@@ -26,17 +26,16 @@ DATABASE_URL=postgresql+asyncpg://retouch:retouch_dev@192.168.137.128:7311/retou
 REDIS_URL=redis://192.168.137.128:7312/0
 API_PORT=7302
 CORS_ORIGINS=http://localhost:7301,http://127.0.0.1:7301
-STORAGE_BACKEND=local
-LOCAL_STORAGE_DIR=./data
-UPLOAD_MAX_BYTES=10485760
-MATTING_PROVIDER=mock
-PLANNER_PROVIDER=dashscope
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-PLANNER_MODEL=qwen-plus
-IMAGE_PROVIDER=dashscope
-TEXT_TO_IMAGE_MODEL=qwen-image-3.0-pro
-# DASHSCOPE_API_KEY 建议放系统环境变量，勿提交仓库
+STORAGE_BACKEND=cos
+COS_SECRET_ID=
+COS_SECRET_KEY=
+COS_REGION=ap-shanghai
+COS_BUCKET=your-bucket-1250000000
+# 本机回退：STORAGE_BACKEND=local 与 LOCAL_STORAGE_DIR=./data
+# COS 四项获取：docs/腾讯云COS密钥与存储桶获取教程.md
 ```
+
+演示登录：`demo` / `demo123`（登录页有一键按钮）。
 
 ## 启动（三个进程）
 
@@ -61,33 +60,23 @@ npm run dev
 
 ## 验收路径
 
-1. 打开 http://127.0.0.1:7301/ 上传商品图进编辑器  
-2. 点 **拆层** → 左侧图层面板出现「背景」「主体」  
-3. 点「隐」隐藏主体 → 画布只剩背景；再显示恢复  
-4. 选中主体后点 **提亮** → 仅主体变亮  
-5. 选区 / Agent / 导出仍可用（导出为可见层合成图）
+1. 打开 http://127.0.0.1:7301/ → 登录页一键演示账号  
+2. 创作页上传 / 文生图 → 进编辑器  
+3. 提亮、去背、翻转、笔刷选区、拆层、Agent 规划确认  
+4. 批量 / 营销图为占位页（后续版本）  
+5. （可选）`.env` 切 `STORAGE_BACKEND=cos` 后上传一张图，桶内可见对象  
 
 ```bash
 curl http://127.0.0.1:7302/api/health
 curl http://127.0.0.1:7302/api/tools
 ```
 
-API 文档：http://127.0.0.1:7302/api/docs
+API 文档：http://127.0.0.1:7302/api/docs  
+接口对照：`docs/v8_API对照表.md`  
+v8 交付说明：`docs/电商商品视觉生产_v8交付说明.md`  
+v8 完成总结：`docs/v8_第八版完成总结.md`
 
-## v7 图层说明
+## 本仓已暴露工具
 
-- 工具 `split_layers`：mock 去背 + 本地填洞，得到背景/主体两资产  
-- `PATCH /api/sessions/{id}/layers`：更新可见性与 `active_layer_id`  
-- 修图工具默认作用在当前选中层  
-- 导出按可见层自下而上扁平化  
-
-## 端口
-
-| 服务 | 端口 |
-|------|------|
-| 前端 Vite | 7301 |
-| 后端 FastAPI | 7302 |
-| PostgreSQL | 7311 |
-| Redis | 7312 |
-
-分支：`version7`，标签：`v7.0.0`
+`adjust_image`、`adjust_region`、`remove_background`、`flip_layer`、`split_layers`  
+工具栏上原仓其它按钮若点到未实现工具，会提示错误（后续版本再补）。

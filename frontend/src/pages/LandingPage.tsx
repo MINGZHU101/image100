@@ -1,91 +1,42 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getHealth, type HealthResponse } from '../api/client'
-import { ImageUpload } from '../components/ImageUpload'
+import { useNavigate } from 'react-router-dom'
 
-type LoadState = 'loading' | 'ready' | 'failed'
+import CapabilityShowcase from '@/components/landing/CapabilityShowcase'
+import DeliverySteps from '@/components/landing/DeliverySteps'
+import LandingFooter from '@/components/landing/LandingFooter'
+import LandingHeader from '@/components/landing/LandingHeader'
+import LandingHero from '@/components/landing/LandingHero'
+import StartBanner from '@/components/landing/StartBanner'
+import { useCurrentUser } from '@/hooks/useAuth'
+import { readPromptDraft, savePromptDraft } from '@/lib/promptDraft'
 
-/** 落地页：产品介绍 + health + 上传入口 */
-export function LandingPage() {
-  const [loadState, setLoadState] = useState<LoadState>('loading')
-  const [health, setHealth] = useState<HealthResponse | null>(null)
-  const [errorMessage, setErrorMessage] = useState('')
+export default function LandingPage() {
+  const navigate = useNavigate()
+  const { user } = useCurrentUser()
 
-  useEffect(() => {
-    let cancelled = false
+  // 未登录一律先去登录页，登录态直接进工作台
+  const entry = user ? { label: '进入工作台', to: '/create' } : { label: '免费开始', to: '/auth' }
 
-    async function loadHealth() {
-      try {
-        const data = await getHealth()
-        if (cancelled) {
-          return
-        }
-        setHealth(data)
-        setLoadState('ready')
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-        const message = error instanceof Error ? error.message : '未知错误'
-        setErrorMessage(message)
-        setLoadState('failed')
-      }
-    }
-
-    void loadHealth()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const start = (prompt: string) => {
+    savePromptDraft(prompt)
+    navigate(entry.to)
+  }
 
   return (
-    <main className="landing">
-      <p className="brand">image100</p>
-      <h1>电商商品视觉</h1>
-      <p className="tagline">
-        面向中小电商卖家的自然语言修图工作台——上传商品图，用一句话说清想要的视觉效果。
-      </p>
+    <div className="flex min-h-screen flex-col">
+      <LandingHeader account={user?.username ?? null} />
 
-      <ImageUpload />
-      <p className="create-entry">
-        <Link to="/create" className="tool-btn">
-          AI 创作（文生图）
-        </Link>
-      </p>
+      <main className="flex-1">
+        <LandingHero
+          initialPrompt={readPromptDraft()}
+          submitLabel={entry.label}
+          onStart={start}
+        />
+        <CapabilityShowcase />
+        <DeliverySteps />
+        <StartBanner label={entry.label} to={entry.to} />
+      </main>
 
-      <section className="health" aria-live="polite">
-        <h2>系统状态</h2>
-        {loadState === 'loading' && <p className="muted">正在检测后端连通性…</p>}
-        {loadState === 'failed' && (
-          <p className="status-error">无法连接后端：{errorMessage}</p>
-        )}
-        {loadState === 'ready' && health && (
-          <ul className="health-list">
-            <li>
-              <span>整体</span>
-              <StatusBadge value={health.status} />
-            </li>
-            <li>
-              <span>PostgreSQL</span>
-              <StatusBadge value={health.postgres} />
-            </li>
-            <li>
-              <span>Redis</span>
-              <StatusBadge value={health.redis} />
-            </li>
-            <li>
-              <span>Storage</span>
-              <StatusBadge value={health.storage ?? '—'} />
-            </li>
-          </ul>
-        )}
-      </section>
-    </main>
+      <LandingFooter />
+    </div>
   )
-}
-
-function StatusBadge({ value }: { value: string }) {
-  const isOk = value === 'ok'
-  const className = isOk ? 'badge ok' : 'badge warn'
-  return <span className={className}>{value}</span>
 }

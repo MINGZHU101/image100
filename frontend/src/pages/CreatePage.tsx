@@ -1,109 +1,73 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { createSession } from '../api/sessions'
-import { ProgressBar } from '../components/editor/ProgressBar'
-import { useGeneration } from '../hooks/useGeneration'
+import { useNavigate } from 'react-router-dom'
 
-/** 文生图创作页：Mock/真实切换 → 候选图 → 进入编辑器 */
-export function CreatePage() {
+import AssetLibrary from '@/components/AssetLibrary'
+import GenerateForm from '@/components/GenerateForm'
+import ImageDropzone from '@/components/ImageDropzone'
+import { errorMessage } from '@/hooks/useAuth'
+import { useAssetLibrary, useUploadAsset } from '@/hooks/useAssets'
+import { useGenerate } from '@/hooks/useRun'
+import { useCreateSession } from '@/hooks/useSessions'
+import { readPromptDraft, savePromptDraft } from '@/lib/promptDraft'
+
+export default function CreatePage() {
   const navigate = useNavigate()
-  const gen = useGeneration()
-  const [prompt, setPrompt] = useState('白色背景的运动鞋电商主图，居中，光线柔和')
-  const [count, setCount] = useState(2)
-  const [opening, setOpening] = useState('')
+  const { data: groups = [], isPending } = useAssetLibrary()
+  const upload = useUploadAsset()
+  const generate = useGenerate()
+  const createSession = useCreateSession()
 
-  async function openInEditor(assetId: string) {
-    setOpening(assetId)
-    try {
-      const session = await createSession(assetId)
-      navigate(`/editor/${session.id}`)
-    } catch (err) {
-      setOpening('')
-      window.alert(err instanceof Error ? err.message : '创建会话失败')
-    }
-  }
+  const openEditor = (assetId: string) =>
+    createSession.mutate(
+      { current_asset_id: assetId },
+      { onSuccess: (session) => navigate(`/editor/${session.id}`) },
+    )
 
   return (
-    <main className="landing create-page">
-      <p className="brand">image100</p>
-      <h1>AI 创作</h1>
-      <p className="tagline">用一句话生成商品图候选，选一张进入编辑器继续精修。</p>
-      <p>
-        <Link to="/" className="back-link">
-          ← 返回上传入口
-        </Link>
-      </p>
+    <div className="mx-auto max-w-4xl px-8 py-10">
+      <h1 className="text-ink mb-6 text-2xl font-semibold tracking-tight">创作</h1>
 
-      <div className="planner-toggle" role="group" aria-label="生图方式">
-        <button
-          type="button"
-          className={`planner-btn${gen.provider === 'mock' ? ' is-active' : ''}`}
-          disabled={gen.busy}
-          onClick={() => gen.setProvider('mock')}
-        >
-          Mock
-        </button>
-        <button
-          type="button"
-          className={`planner-btn${gen.provider === 'dashscope' ? ' is-active' : ''}`}
-          disabled={gen.busy || !gen.dashscopeAvailable}
-          onClick={() => gen.setProvider('dashscope')}
-        >
-          真实生图
-        </button>
-      </div>
+      <GenerateForm
+        defaultPrompt={readPromptDraft()}
+        pending={generate.isPending}
+        onSubmit={(input) =>
+          generate.mutate(input, {
+            onSuccess: (run) => {
+              savePromptDraft('')
+              navigate(`/candidates/${run.id}`)
+            },
+          })
+        }
+      />
+      {generate.isError && (
+        <p className="text-danger mt-2 text-sm">{errorMessage(generate.error)}</p>
+      )}
 
-      <form
-        className="create-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void gen.generate(prompt, count)
-        }}
-      >
-        <textarea
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          rows={4}
-          disabled={gen.busy}
+      <section className="mt-10">
+        <h2 className="text-muted mb-3 text-sm font-medium">上传已有图片</h2>
+        <ImageDropzone
+          onFile={(file) => upload.mutate(file, { onSuccess: (asset) => openEditor(asset.id) })}
+          disabled={upload.isPending || createSession.isPending}
         />
-        <label className="muted">
-          张数
-          <select
-            value={count}
-            disabled={gen.busy}
-            onChange={(event) => setCount(Number(event.target.value))}
-          >
-            {[1, 2, 3, 4].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className="upload-btn" disabled={gen.busy || !prompt.trim()}>
-          {gen.busy ? '生成中…' : '生成候选图'}
-        </button>
-      </form>
+        {upload.isError && (
+          <p className="text-danger mt-2 text-sm">{errorMessage(upload.error)}</p>
+        )}
+      </section>
 
-      <ProgressBar progress={gen.progress} message={gen.message} visible={gen.busy || gen.progress > 0} />
-      {gen.error && <p className="status-error">{gen.error}</p>}
+      <section className="mt-10">
+        <h2 className="text-muted mb-3 text-sm font-medium">历史素材</h2>
 
-      <div className="candidate-grid">
-        {gen.assetIds.map((assetId) => (
-          <button
-            key={assetId}
-            type="button"
-            className="candidate-card"
-            disabled={opening === assetId}
-            onClick={() => {
-              void openInEditor(assetId)
-            }}
-          >
-            <img src={`/api/assets/${assetId}/file`} alt="候选图" />
-            <span>{opening === assetId ? '进入中…' : '用这张进入编辑器'}</span>
-          </button>
-        ))}
-      </div>
-    </main>
+        {isPending ? (
+          <p className="text-faint text-sm">加载中…</p>
+        ) : groups.length === 0 ? (
+          <p className="text-faint text-sm">还没有素材，先描述画面或上传一张图片。</p>
+        ) : (
+          <AssetLibrary
+            groups={groups}
+            onOpenSession={(sessionId) => navigate(`/editor/${sessionId}`)}
+            onOpenAsset={openEditor}
+          />
+        )}
+      </section>
+    </div>
   )
 }

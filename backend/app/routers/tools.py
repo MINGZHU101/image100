@@ -29,6 +29,7 @@ async def invoke_tool(
     return await tools_service.invoke_tool(db, session_id, tool_name, body.params)
 
 
-@router.get("/runs/{run_id}", response_model=RunOut)
-async def get_run(run_id: UUID, db: DbDep) -> RunOut:
-    return await tools_service.get_run(db, run_id)
+@router.get("/runs/{run_id}")
+async def get_run(run_id: UUID, db: DbDep):
+    """兼容原仓 Run：同时覆盖工具运行与文生图。"""
+    return await tools_service.get_run_compat(db, run_id)

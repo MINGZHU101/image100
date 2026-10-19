@@ -1,15 +1,19 @@
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 
-// 开发态通过代理同源访问后端，避免浏览器直连跨域
+// 开发态同源代理后端；SSE 关闭缓冲以免进度事件被攒批
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   server: {
     host: '127.0.0.1',
     port: 7301,
     strictPort: true,
     proxy: {
-      // SSE 单独代理，关闭缓冲以免进度事件被攒批
       '/api/events': {
         target: 'http://127.0.0.1:7302',
         changeOrigin: true,
@@ -25,6 +29,5 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-
   },
 })

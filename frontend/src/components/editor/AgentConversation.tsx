@@ -1,107 +1,170 @@
-import { useState } from 'react'
-import type { AgentRunOut, PlannerProvider } from '../../api/agent'
-import { PlanCard } from './PlanCard'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
-interface AgentConversationProps {
-  provider: PlannerProvider
-  dashscopeAvailable: boolean
-  busy: boolean
-  error: string
-  current: AgentRunOut | null
-  onProviderChange: (provider: PlannerProvider) => void
-  onSubmit: (goal: string) => void
-  onConfirm: () => void
-  onCancel: () => void
+import type { PlanStep, StepStatus, Turn } from '@/api/agent'
+import { isTerminal } from '@/api/runs'
+import Button from '@/components/ui/Button'
+import ProgressBar from '@/components/ui/ProgressBar'
+import { usePlanActions, useTurns } from '@/hooks/useAgent'
+import { useRun } from '@/hooks/useRun'
+
+const STEP_LABEL: Record<StepStatus, string> = {
+  pending: '等待中',
+  waiting: '待确认',
+  queued: '排队中',
+  running: '进行中',
+  succeeded: '已完成',
+  failed: '未完成',
+  canceled: '已取消',
 }
 
-/** 右侧 Agent 对话区：Mock/LLM 切换 + 输入 + 计划卡片 */
-export function AgentConversation({
-  provider,
-  dashscopeAvailable,
-  busy,
-  error,
-  current,
-  onProviderChange,
-  onSubmit,
-  onConfirm,
-  onCancel,
-}: AgentConversationProps) {
-  const [goal, setGoal] = useState('')
+export default function AgentConversation({ sessionId }: { sessionId: string }) {
+  const { data: turns = [], isPending } = useTurns(sessionId)
+  const end = useRef<HTMLDivElement>(null)
+  const latest = turns.at(-1)
+
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' })
+  }, [turns.length, latest?.status])
+
+  if (isPending) {
+    return <p className="text-faint min-h-0 flex-1 px-4 py-4 text-xs">加载中…</p>
+  }
+
+  if (turns.length === 0) {
+    return (
+      <p className="text-faint min-h-0 flex-1 px-4 py-4 text-xs leading-relaxed">
+        用一句话说明要怎么改，例如「水平翻转」或「去背景再调亮一点」。多步计划会先列出再执行。
+      </p>
+    )
+  }
 
   return (
-    <aside className="agent-panel">
-      <div className="agent-panel-header">
-        <h2>自然语言修图</h2>
-        <div className="planner-toggle" role="group" aria-label="规划器切换">
-          <button
-            type="button"
-            className={`planner-btn${provider === 'mock' ? ' is-active' : ''}`}
-            disabled={busy}
-            onClick={() => onProviderChange('mock')}
-          >
-            Mock
-          </button>
-          <button
-            type="button"
-            className={`planner-btn${provider === 'dashscope' ? ' is-active' : ''}`}
-            disabled={busy || !dashscopeAvailable}
-            title={dashscopeAvailable ? '通义千问规划' : '未检测到 DASHSCOPE_API_KEY'}
-            onClick={() => onProviderChange('dashscope')}
-          >
-            LLM
-          </button>
-        </div>
-      </div>
+    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
+      {turns.map((turn) => (
+        <TurnBlock key={turn.id} turn={turn} sessionId={sessionId} />
+      ))}
+      <div ref={end} />
+    </div>
+  )
+}
 
-      <p className="muted agent-hint">
-        当前：{provider === 'mock' ? 'Mock 规则规划' : 'DashScope LLM'}
-        。试试「去掉背景，再提亮一点」
+function TurnBlock({ turn, sessionId }: { turn: Turn; sessionId: string }) {
+  return (
+    <div className="space-y-2">
+      <p className="bg-brand-soft text-brand-strong ml-6 rounded-[12px] px-3 py-2 text-xs leading-relaxed">
+        {turn.goal}
       </p>
 
-      <div className="agent-messages">
-        {current && (
-          <div className="agent-bubble">
-            <p className="agent-goal">你：{current.goal}</p>
-            {current.reply && <p className="agent-reply">助手：{current.reply}</p>}
-            {current.status !== 'planned' && (
-              <p className="muted">状态：{current.status}</p>
-            )}
-          </div>
-        )}
-        {current && (
-          <PlanCard
-            run={current}
-            disabled={busy}
-            onConfirm={onConfirm}
-            onCancel={onCancel}
-          />
-        )}
+      {turn.error ? (
+        <p className="text-danger mr-6 text-xs leading-relaxed">{turn.error}</p>
+      ) : (
+        <p className="text-ink mr-6 text-xs leading-relaxed">{turn.reply}</p>
+      )}
+
+      {turn.steps.map((step, index) => (
+        <StepCard key={step.id} index={index + 1} step={step} sessionId={sessionId} />
+      ))}
+
+      <PlanActions turn={turn} sessionId={sessionId} />
+    </div>
+  )
+}
+
+function PlanActions({ turn, sessionId }: { turn: Turn; sessionId: string }) {
+  const actions = usePlanActions(sessionId)
+  if (turn.status === 'queued') {
+    return (
+      <div className="mr-6 flex gap-1.5">
+        <Action disabled={actions.busy} onClick={() => actions.confirm(turn.id)}>
+          执行计划
+        </Action>
+        <Action disabled={actions.busy} onClick={() => actions.cancel(turn.id)}>
+          取消
+        </Action>
+      </div>
+    )
+  }
+  if (turn.status === 'running') {
+    return (
+      <div className="mr-6">
+        <Action disabled={actions.busy} onClick={() => actions.cancel(turn.id)}>
+          取消后续
+        </Action>
+      </div>
+    )
+  }
+  if (turn.status === 'failed') {
+    return (
+      <div className="mr-6">
+        <Action disabled={actions.busy} onClick={() => actions.retry(turn.id)}>
+          重试失败步骤
+        </Action>
+      </div>
+    )
+  }
+  return null
+}
+
+function Action({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: ReactNode
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
+      {children}
+    </Button>
+  )
+}
+
+function StepCard({
+  index,
+  step,
+  sessionId,
+}: {
+  index: number
+  step: PlanStep
+  sessionId: string
+}) {
+  const queryClient = useQueryClient()
+  const { status, progress, stage, error } = useRun(step.run_id)
+  const watched = useRef(false)
+  const current = status ?? step.status
+  const running = current === 'queued' || current === 'running'
+
+  useEffect(() => {
+    if (status === 'queued' || status === 'running') watched.current = true
+    if (!watched.current || !status || !isTerminal(status)) return
+    watched.current = false
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] })
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId, 'history'] })
+    void queryClient.invalidateQueries({ queryKey: ['session', sessionId, 'messages'] })
+  }, [status, sessionId, queryClient])
+
+  return (
+    <div className="border-line mr-6 rounded-[12px] border px-3 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-ink text-xs font-medium">
+          {index}. {step.label}
+        </span>
+        <span className="text-faint shrink-0 text-[10px] tabular-nums">
+          {running ? `${progress}%` : STEP_LABEL[current]}
+        </span>
       </div>
 
-      {error && <p className="status-error">{error}</p>}
+      {running && (
+        <>
+          <ProgressBar value={progress} className="mt-2 h-0.5 rounded-full" />
+          <p className="text-faint mt-1.5 text-[10px]">{stage}</p>
+        </>
+      )}
 
-      <form
-        className="agent-composer"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!goal.trim()) {
-            return
-          }
-          onSubmit(goal)
-          setGoal('')
-        }}
-      >
-        <textarea
-          value={goal}
-          onChange={(event) => setGoal(event.target.value)}
-          placeholder="用一句话描述修图意图…"
-          rows={3}
-          disabled={busy}
-        />
-        <button type="submit" className="tool-btn tool-btn-export" disabled={busy || !goal.trim()}>
-          {busy ? '处理中…' : '发送'}
-        </button>
-      </form>
-    </aside>
+      {error && <p className="text-danger mt-1.5 text-[10px] leading-relaxed">{error}</p>}
+    </div>
   )
 }
