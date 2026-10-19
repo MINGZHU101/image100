@@ -163,8 +163,15 @@ body {
 .editor-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .tool-btn {
@@ -177,6 +184,12 @@ body {
   padding: 0.45rem 0.9rem;
   cursor: pointer;
   text-decoration: none;
+}
+
+.tool-btn.is-active {
+  border-color: var(--accent);
+  background: #e8f1f6;
+  color: var(--accent);
 }
 
 .tool-btn:hover:not(:disabled) {
@@ -243,6 +256,10 @@ body {
   border: 1px solid var(--line);
   background: #dfe6ee;
   overflow: hidden;
+}
+
+.canvas-wrap.is-selecting {
+  cursor: crosshair;
 }
 
 .agent-panel {

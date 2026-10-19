@@ -7,10 +7,11 @@ class MockPlanner:
     name = "mock"
 
     async def plan(self, goal: str, context: str) -> tuple[str, list[dict]]:
-        del context  # mock 不依赖画布细节
         text = (goal or "").strip().lower()
         # 同时保留中文原文匹配
         raw = goal or ""
+        ctx = context or ""
+        has_selection = "选区：有" in ctx
 
         steps: list[dict] = []
         want_matting = any(
@@ -19,7 +20,29 @@ class MockPlanner:
         want_bright = any(
             key in raw for key in ("提亮", "亮一点", "亮度", "更亮", "提高亮度")
         )
+        want_local = any(
+            key in raw for key in ("局部", "选区", "框内", "这块", "圈内")
+        )
         want_flip = any(key in raw for key in ("翻转", "镜像", "水平翻"))
+
+        # 局部提亮：有选区才规划 adjust_region；无选区则提示
+        if want_bright and want_local:
+            if not has_selection:
+                return (
+                    "请先在画布上框选或涂抹选区，再试「局部提亮」。",
+                    [],
+                )
+            steps.append(
+                {
+                    "tool_name": "adjust_region",
+                    "params": {
+                        "brightness": 0.2,
+                        "contrast": 0.0,
+                        "saturation": 0.0,
+                    },
+                }
+            )
+            want_bright = False
 
         if want_matting:
             steps.append({"tool_name": "remove_background", "params": {}})
@@ -27,7 +50,11 @@ class MockPlanner:
             steps.append(
                 {
                     "tool_name": "adjust_image",
-                    "params": {"brightness": 0.2, "contrast": 0.0, "saturation": 0.0},
+                    "params": {
+                        "brightness": 0.2,
+                        "contrast": 0.0,
+                        "saturation": 0.0,
+                    },
                 }
             )
         if want_flip:
@@ -37,7 +64,25 @@ class MockPlanner:
         if not steps:
             if "background" in text or "matting" in text:
                 steps.append({"tool_name": "remove_background", "params": {}})
-            if "bright" in text or "light" in text:
+            if ("region" in text or "local" in text) and (
+                "bright" in text or "light" in text
+            ):
+                if not has_selection:
+                    return (
+                        "请先在画布上框选或涂抹选区，再试局部提亮。",
+                        [],
+                    )
+                steps.append(
+                    {
+                        "tool_name": "adjust_region",
+                        "params": {
+                            "brightness": 0.2,
+                            "contrast": 0.0,
+                            "saturation": 0.0,
+                        },
+                    }
+                )
+            elif "bright" in text or "light" in text:
                 steps.append(
                     {
                         "tool_name": "adjust_image",
@@ -53,7 +98,7 @@ class MockPlanner:
 
         if not steps:
             return (
-                "没识别出可用的修图步骤。可以试试「去背」「提亮」「翻转」，或点工具栏。",
+                "没识别出可用的修图步骤。可以试试「去背」「提亮」「局部提亮」「翻转」，或点工具栏。",
                 [],
             )
 
@@ -64,6 +109,8 @@ class MockPlanner:
                 labels.append("去背景")
             elif name == "adjust_image":
                 labels.append("提亮")
+            elif name == "adjust_region":
+                labels.append("局部提亮")
             elif name == "flip_layer":
                 labels.append("水平翻转")
             else:

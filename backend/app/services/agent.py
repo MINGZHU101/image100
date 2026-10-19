@@ -59,10 +59,17 @@ def _canvas_context(document: dict | None) -> str:
     canvas = doc.get("canvas") or {}
     layers = doc.get("layers") or []
     main = layers[0] if layers else {}
+    selection = doc.get("selection")
+    if selection and isinstance(selection, dict):
+        sel_type = selection.get("type") or "unknown"
+        selection_text = f"选区：有（{sel_type}）"
+    else:
+        selection_text = "选区：无"
     return (
         f"画布 {canvas.get('width')}×{canvas.get('height')}；"
         f"主图层 asset_id={main.get('asset_id')}；"
-        f"可见层数={len(layers)}"
+        f"可见层数={len(layers)}；"
+        f"{selection_text}"
     )
 
 

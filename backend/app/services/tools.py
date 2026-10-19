@@ -41,8 +41,17 @@ async def invoke_tool(
     elif not tool.ui_exposed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="工具不存在")
 
+    # 局部工具：入队前校验选区，便于前端立刻看到错误
+    if tool_name == "adjust_region":
+        selection = (edit_session.document or {}).get("selection")
+        if not selection:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请先框选或涂抹选区",
+            )
 
     # 用 params_model 校验并规范化参数
+
     try:
         validated = tool.params_model.model_validate(params or {})
         clean_params = validated.model_dump()

@@ -2,7 +2,7 @@
 
 面向中小电商卖家 / 运营的「自然语言电商修图工作台」。
 
-当前版本：**v5（文生图创作页）** — 创作页生成候选图，选一张进入编辑器精修。
+当前版本：**v6（选区 + 局部调色）** — 矩形/笔刷框选后，仅对选区内提亮。
 
 ## 技术栈
 
@@ -61,24 +61,32 @@ npm run dev
 
 ## 验收路径
 
-1. 打开 http://127.0.0.1:7301/ 上传商品图  
-2. 工具栏手动修图仍可用  
-3. 右侧「自然语言修图」：用 **Mock / LLM** 按钮切换规划器  
-4. 输入「去掉背景，再提亮一点」→ 计划卡片 → 确认执行 → 画布更新  
+1. 打开 http://127.0.0.1:7301/ 上传商品图（或创作页生图进编辑器）
+2. 工具栏左侧：**矩形选区** / **笔刷选区** / **清除选区**
+3. 在画布上框选一块区域 → 点 **局部提亮** → 仅选区内变亮
+4. 整图提亮 / 去背景 / 翻转 / 导出仍可用
+5. （可选）Agent Mock：先框选，再输入「局部提亮一点」→ 计划卡片含 `adjust_region`
 
 ```bash
 curl http://127.0.0.1:7302/api/health
-curl http://127.0.0.1:7302/api/agent/planner-options
+curl http://127.0.0.1:7302/api/tools
 ```
 
 API 文档：http://127.0.0.1:7302/api/docs
 
+## v6 选区说明
+
+- 选区写入会话 `document.selection`（`PATCH /api/sessions/{id}/selection`）
+- 坐标相对画布 **0～1**；笔刷默认半径相对短边 `0.03`
+- 工具 `adjust_region`：整图调色后按掩膜合成，选区外不变；成功后自动清空选区
+- 选区模式下画布优先绘制选区；退出选区模式后可拖拽平移
+
 ## Agent 架构（v4）
 
-- **③ Plan & Execute**：先产出计划，确认后再执行  
-- **⑦ Graph/Workflow**：LangGraph `plan → verify → END`  
-- **HITL**：PlanCard + REST confirm（图内不 interrupt）  
-- 执行复用 v3 ToolRegistry + ARQ + SSE  
+- **③ Plan & Execute**：先产出计划，确认后再执行
+- **⑦ Graph/Workflow**：LangGraph `plan → verify → END`
+- **HITL**：PlanCard + REST confirm（图内不 interrupt）
+- 执行复用 ToolRegistry + ARQ + SSE
 
 ## 端口
 
@@ -89,4 +97,4 @@ API 文档：http://127.0.0.1:7302/api/docs
 | PostgreSQL | 7311 |
 | Redis | 7312 |
 
-分支：`version4`，标签：`v4.0.0`
+分支：`version6`，标签：`v6.0.0`（打 tag 前以实际提交为准）

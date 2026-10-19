@@ -1,9 +1,12 @@
-"""编辑会话用例：创建与查询。"""
+"""编辑会话用例：创建、查询与选区同步。"""
 
+from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import DEMO_USER_ID
 from app.models.edit_session import EditSession
@@ -63,3 +66,38 @@ async def get_session(session: AsyncSession, session_id: UUID) -> SessionOut:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     return to_session_out(row)
+
+
+async def update_selection(
+    session: AsyncSession,
+    session_id: UUID,
+    selection: dict[str, Any] | None,
+) -> SessionOut:
+    """写入或清除 document.selection。"""
+    row = await session.get(EditSession, session_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    document = dict(row.document or {})
+    document["selection"] = selection
+    row.document = document
+    flag_modified(row, "document")
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    return to_session_out(row)
+
+
+async def clear_selection(session: AsyncSession, session_id: UUID) -> None:
+    """工具成功后清空选区（若会话已不存在则忽略）。"""
+    row = await session.get(EditSession, session_id)
+    if row is None:
+        return
+    document = dict(row.document or {})
+    if document.get("selection") is None:
+        return
+    document["selection"] = None
+    row.document = document
+    flag_modified(row, "document")
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+

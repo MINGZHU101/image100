@@ -1,5 +1,7 @@
 /** 编辑会话 API */
 
+import type { CanvasSelection } from '../types/selection'
+
 export interface SessionOut {
   id: string
   title: string | null
@@ -13,7 +15,7 @@ export interface SessionOut {
       asset_key: string
       visible: boolean
     }>
-    selection: unknown
+    selection: CanvasSelection | null
   }
   created_at: string
   updated_at: string
@@ -39,3 +41,21 @@ export async function getSession(sessionId: string): Promise<SessionOut> {
   }
   return response.json() as Promise<SessionOut>
 }
+
+/** 同步选区；传 null 清除 */
+export async function patchSelection(
+  sessionId: string,
+  selection: CanvasSelection | null,
+): Promise<SessionOut> {
+  const response = await fetch(`/api/sessions/${sessionId}/selection`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selection }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`同步选区失败：${response.status} ${text}`)
+  }
+  return response.json() as Promise<SessionOut>
+}
+
