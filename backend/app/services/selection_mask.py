@@ -145,6 +145,102 @@ async def apply_brush_selection(
     }
 
 
+def render_point_mask(
+    *,
+    width: int,
+    height: int,
+    points: list[dict[str, float]],
+    image_bytes: bytes | None = None,
+) -> tuple[bytes, list[dict[str, Any]]]:
+    """
+    简化点选：在点击处画椭圆选区（mock，非 SAM）。
+    多点则并集；markers 供前端角标。
+    """
+    ink = (95, 152, 173, 200)
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    radius = max(8, int(min(width, height) * 0.08))
+    markers: list[dict[str, Any]] = []
+    del image_bytes  # 预留：后续可用颜色洪水填充
+    for index, point in enumerate(points):
+        x = float(point["x"]) * width
+        y = float(point["y"]) * height
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=ink)
+        markers.append({"index": index + 1, "x": float(point["x"]), "y": float(point["y"])})
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue(), markers
+
+
+async def apply_point_selection(
+    session: AsyncSession,
+    row: EditSession,
+    *,
+    points: list[dict[str, float]],
+    append: bool,
+) -> dict[str, Any]:
+    """点选 → document.selection(rect 近似) + mask 资产。"""
+    if not points:
+        raise ValueError("points 不能为空")
+    document = dict(row.document or {})
+    width, height = _canvas_size(document)
+    mask_bytes, markers = render_point_mask(width=width, height=height, points=points)
+
+    # 用包围盒近似写入 rect selection，供 adjust_region / erase 使用
+    xs = [float(p["x"]) for p in points]
+    ys = [float(p["y"]) for p in points]
+    pad = 0.08
+    x0 = max(0.0, min(xs) - pad)
+    y0 = max(0.0, min(ys) - pad)
+    x1 = min(1.0, max(xs) + pad)
+    y1 = min(1.0, max(ys) + pad)
+    document["selection"] = {
+        "type": "rect",
+        "rect": {"x": x0, "y": y0, "width": max(x1 - x0, 0.02), "height": max(y1 - y0, 0.02)},
+        "feather": 0.0,
+    }
+    if append and markers:
+        prev = document.get("selection_markers") or []
+        markers = list(prev) + markers
+
+    asset_id = uuid.uuid4()
+    storage_key = f"objects/{asset_id}.png"
+    get_storage().put(storage_key, mask_bytes, "image/png")
+    asset = Asset(
+        id=asset_id,
+        owner_id=UUID(DEMO_USER_ID),
+        storage_key=storage_key,
+        width=width,
+        height=height,
+        mime="image/png",
+    )
+    session.add(asset)
+    document["selection_mask_asset_id"] = str(asset_id)
+    document["selection_markers"] = markers
+    document["selection_revision"] = int(document.get("selection_revision") or 0) + 1
+    row.document = document
+    flag_modified(row, "document")
+    await session.commit()
+    await session.refresh(row)
+    await session.refresh(asset)
+    return {
+        "revision": int(document["selection_revision"]),
+        "mask": {
+            "id": str(asset.id),
+            "kind": "mask",
+            "source": "tool",
+            "image_format": "png",
+            "width": asset.width,
+            "height": asset.height,
+            "size_bytes": len(mask_bytes),
+            "has_alpha": True,
+            "created_at": asset.created_at.isoformat(),
+            "url": asset_file_url(asset.id),
+        },
+        "markers": markers,
+    }
+
+
 def selection_payload_from_document(document: dict[str, Any] | None) -> dict[str, Any] | None:
     """从 document 还原前端 Selection；无 mask 则 None。"""
     doc = document or {}

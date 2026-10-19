@@ -124,10 +124,12 @@ async def patch_session(
 
 @router.get("/{session_id}/history")
 async def session_history(session_id: UUID, db: DbDep) -> list[dict[str, Any]]:
+    from app.services import history as history_service
+
     row = await db.get(EditSession, session_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-    return []
+    return await history_service.list_history(db, session_id)
 
 
 @router.post("/{session_id}/tools")
@@ -190,12 +192,18 @@ async def invoke_tool_compat(
 
 @router.post("/{session_id}/undo")
 async def undo_session(session_id: UUID, db: DbDep) -> dict[str, Any]:
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="撤销将在后续版本提供")
+    from app.services import history as history_service
+
+    row = await history_service.undo(db, session_id)
+    return await build_session_detail(db, row)
 
 
 @router.post("/{session_id}/redo")
 async def redo_session(session_id: UUID, db: DbDep) -> dict[str, Any]:
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="重做将在后续版本提供")
+    from app.services import history as history_service
+
+    row = await history_service.redo(db, session_id)
+    return await build_session_detail(db, row)
 
 
 @router.post("/{session_id}/selection/prepare", status_code=status.HTTP_204_NO_CONTENT)
@@ -212,14 +220,15 @@ async def select_compat(session_id: UUID, body: SelectCompatIn, db: DbDep) -> di
     row = await db.get(EditSession, session_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-    if body.points:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="点选（智能抠选）将在后续版本提供，请使用笔刷",
-        )
-    if not body.strokes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 strokes")
+    from app.services.selection_mask import apply_point_selection
+
     try:
+        if body.points:
+            return await apply_point_selection(
+                db, row, points=body.points, append=body.append
+            )
+        if not body.strokes:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 strokes 或 points")
         return await apply_brush_selection(
             db,
             row,

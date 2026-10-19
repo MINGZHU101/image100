@@ -4,7 +4,9 @@ from functools import lru_cache
 
 from app.tools.base import ToolSpec
 from app.tools.canvas_ops import FLIP_LAYER
+from app.tools.extra import EXTRA_TOOLS
 from app.tools.layers import SPLIT_LAYERS
+from app.tools.marketing import GENERATE_MARKETING, PREPARE_DELIVERY
 from app.tools.region import ADJUST_REGION
 from app.tools.retouch import ADJUST_IMAGE, REMOVE_BACKGROUND
 
@@ -18,6 +20,9 @@ def get_registry() -> dict[str, ToolSpec]:
         REMOVE_BACKGROUND,
         FLIP_LAYER,
         SPLIT_LAYERS,
+        *EXTRA_TOOLS,
+        GENERATE_MARKETING,
+        PREPARE_DELIVERY,
     ]
     return {item.name: item for item in tools}
 

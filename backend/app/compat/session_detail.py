@@ -112,6 +112,8 @@ def original_asset_id(document: dict[str, Any] | None) -> str | None:
 
 async def build_session_detail(session: AsyncSession, row: EditSession) -> dict[str, Any]:
     """组装原仓 SessionDetail 兼容字典。"""
+    from app.services import history as history_service
+
     document = row.document or {}
     asset_ids = asset_ids_from_document(document)
     assets_out: list[dict[str, Any]] = []
@@ -141,12 +143,14 @@ async def build_session_detail(session: AsyncSession, row: EditSession) -> dict[
 
     cur = current_asset_id(document) or (assets_out[0]["id"] if assets_out else "")
     orig = original_asset_id(document) or cur
+    can_undo, can_redo = await history_service.can_undo_redo(session, row)
+    history_seq = int(getattr(row, "history_seq", 1) or 1)
 
     return {
         "id": str(row.id),
         "title": row.title or "未命名",
-        "revision": 0,
-        "history_seq": 0,
+        "revision": history_seq,
+        "history_seq": history_seq,
         "original_asset_id": orig,
         "current_asset_id": cur,
         "created_at": row.created_at.isoformat(),
@@ -154,8 +158,8 @@ async def build_session_detail(session: AsyncSession, row: EditSession) -> dict[
         "document": normalize_document(document),
         "previous_document": None,
         "assets": assets_out,
-        "can_undo": False,
-        "can_redo": False,
+        "can_undo": can_undo,
+        "can_redo": can_redo,
     }
 
 

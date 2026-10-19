@@ -80,14 +80,34 @@ export default function EditorToolbar({
             <Button
               disabled={tools.busy || picking.busy || !picking.selection}
               progress={running('adjust_region')}
-              title={
-                picking.selection
-                  ? '仅提亮当前选区（本仓已实现）'
-                  : '先用笔刷涂抹选区'
-              }
+              title={picking.selection ? '仅提亮当前选区' : '先建立选区'}
               onClick={() => tools.invoke('adjust_region', {})}
             >
               局部提亮
+            </Button>
+            <Button
+              disabled={tools.busy || picking.busy || !picking.selection}
+              progress={running('erase_region')}
+              title={picking.selection ? '消除选中区域' : '先建立选区'}
+              onClick={() => tools.invoke('erase_region', {})}
+            >
+              消除
+            </Button>
+            <Button
+              disabled={!picking.selection}
+              active={ui.panel === 'replace'}
+              title={picking.selection ? '按描述替换选区' : '先建立选区'}
+              onClick={() => ui.setPanel(ui.panel === 'replace' ? null : 'replace')}
+            >
+              替换
+            </Button>
+            <Button
+              disabled={tools.busy || picking.busy || !picking.selection}
+              progress={running('promote_object_to_layer')}
+              title={picking.selection ? '把选区提升为独立图层' : '先建立选区'}
+              onClick={() => tools.invoke('promote_object_to_layer', {})}
+            >
+              成层
             </Button>
             <Button
               disabled={!picking.selection || picking.busy}

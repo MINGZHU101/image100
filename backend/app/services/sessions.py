@@ -44,6 +44,8 @@ def to_session_out(row: EditSession) -> SessionOut:
 
 
 async def create_session(session: AsyncSession, asset_id: UUID) -> SessionOut:
+    from app.services import history as history_service
+
     asset = await get_asset_or_404(session, asset_id)
     document = build_document(
         asset_id=asset.id,
@@ -55,10 +57,12 @@ async def create_session(session: AsyncSession, asset_id: UUID) -> SessionOut:
         owner_id=UUID(DEMO_USER_ID),
         title="商品编辑",
         document=document,
+        history_seq=1,
     )
     session.add(row)
     await session.commit()
     await session.refresh(row)
+    await history_service.ensure_initial_history(session, row)
     return to_session_out(row)
 
 
@@ -94,9 +98,11 @@ async def clear_selection(session: AsyncSession, session_id: UUID) -> None:
     if row is None:
         return
     document = dict(row.document or {})
-    if document.get("selection") is None:
+    if document.get("selection") is None and not document.get("selection_mask_asset_id"):
         return
     document["selection"] = None
+    document.pop("selection_mask_asset_id", None)
+    document.pop("selection_markers", None)
     row.document = document
     flag_modified(row, "document")
     row.updated_at = datetime.now(timezone.utc)

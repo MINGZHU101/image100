@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, func
+from sqlalchemy import ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,6 +21,8 @@ class EditSession(UUIDBase):
     )
     title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     document: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # 当前历史指针；创建会话时为 1（首条 create 快照）
+    history_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMPTZ, server_default=func.now(), onupdate=func.now()
     )

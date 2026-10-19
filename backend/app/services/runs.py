@@ -155,6 +155,9 @@ async def write_result_asset(
     )
     session.add(asset)
 
+    from app.services import history as history_service
+
+    before = history_service.snapshot_document(edit_session.document)
     document = dict(edit_session.document or {})
     canvas = dict(document.get("canvas") or {})
     # 仅单层会话时同步画布尺寸；多层拆层后保持原画布，避免主体透明图缩小画布
@@ -217,6 +220,14 @@ async def write_result_asset(
 
     run.result_asset_id = asset_id
     await session.commit()
+    await session.refresh(edit_session)
+    await history_service.record_edit(
+        session,
+        edit_session,
+        action=run.tool_name,
+        params=dict(run.params or {}),
+        before=before,
+    )
     return asset_id
 
 

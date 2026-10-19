@@ -86,6 +86,9 @@ async def _split_layers_handler(session: AsyncSession, run: ToolRun) -> dict[str
     background_asset = await _store_png(session, background_png)
     subject_asset = await _store_png(session, subject_png)
 
+    from app.services import history as history_service
+
+    before = history_service.snapshot_document(edit_session.document)
     document["layers"] = build_split_layers(
         background_asset_id=str(background_asset.id),
         background_key=background_asset.storage_key,
@@ -99,6 +102,14 @@ async def _split_layers_handler(session: AsyncSession, run: ToolRun) -> dict[str
     flag_modified(edit_session, "document")
     run.result_asset_id = subject_asset.id
     await session.commit()
+    await session.refresh(edit_session)
+    await history_service.record_edit(
+        session,
+        edit_session,
+        action="split_layers",
+        params=dict(run.params or {}),
+        before=before,
+    )
 
     await runs_service.report_progress(session, run, 95, "拆层完成")
     return {

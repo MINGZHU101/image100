@@ -2,7 +2,18 @@
 
 from fastapi import APIRouter
 
-from app.routers import agent, assets, auth, events, export, generations, health, sessions, tools
+from app.routers import (
+    agent,
+    assets,
+    auth,
+    batches,
+    events,
+    export,
+    generations,
+    health,
+    sessions,
+    tools,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -14,3 +25,4 @@ api_router.include_router(events.router)
 api_router.include_router(export.router)
 api_router.include_router(agent.router)
 api_router.include_router(generations.router)
+api_router.include_router(batches.router)
