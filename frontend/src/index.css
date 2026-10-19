@@ -244,10 +244,110 @@ body {
   min-height: 60vh;
 }
 
+.editor-body-with-layers {
+  grid-template-columns: minmax(140px, 180px) 1fr minmax(260px, 320px);
+}
+
+@media (max-width: 1100px) {
+  .editor-body-with-layers {
+    grid-template-columns: 1fr minmax(240px, 300px);
+  }
+
+  .editor-body-with-layers .layer-panel {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 900px) {
-  .editor-body {
+  .editor-body,
+  .editor-body-with-layers {
     grid-template-columns: 1fr;
   }
+}
+
+.layer-panel {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0.65rem;
+  /* 高度随内容，不跟画布撑满一列 */
+  align-self: start;
+  height: fit-content;
+  min-height: 0;
+}
+
+.layer-panel-title {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.layer-panel-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.layer-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.layer-eye-btn {
+  flex: 0 0 2rem;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.layer-eye-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.layer-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+}
+
+.layer-item.is-active {
+  border-color: var(--accent);
+  background: #e8f1f6;
+}
+
+.layer-name {
+  font-weight: 600;
+}
+
+.layer-active-tag {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .canvas-wrap {
@@ -256,6 +356,17 @@ body {
   border: 1px solid var(--line);
   background: #dfe6ee;
   overflow: hidden;
+}
+
+.canvas-wrap.has-checkerboard {
+  background-color: #dfe6ee;
+  background-image:
+    linear-gradient(45deg, #c8d2dc 25%, transparent 25%),
+    linear-gradient(-45deg, #c8d2dc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #c8d2dc 75%),
+    linear-gradient(-45deg, transparent 75%, #c8d2dc 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
 }
 
 .canvas-wrap.is-selecting {

@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Image as KonvaImage } from 'react-konva'
+import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type Konva from 'konva'
 import type { CanvasSelection, SelectionMode } from '../../types/selection'
 import { SelectionOverlay } from './SelectionOverlay'
 
+export interface CanvasLayerView {
+  id: string
+  url: string
+  visible: boolean
+}
+
 interface CanvasStageProps {
-  imageUrl: string
+  layers: CanvasLayerView[]
   canvasWidth: number
   canvasHeight: number
   selectionMode: SelectionMode
@@ -19,9 +25,9 @@ interface CanvasStageProps {
   onEndRect: () => void
 }
 
-/** Konva 画布：显示主图层 + 选区；支持缩放/平移（非选区模式） */
+/** Konva 画布：多层叠放 + 选区；支持缩放/平移（非选区模式） */
 export function CanvasStage({
-  imageUrl,
+  layers,
   canvasWidth,
   canvasHeight,
   selectionMode,
@@ -36,21 +42,43 @@ export function CanvasStage({
 }: CanvasStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
-  const [image, setImage] = useState<HTMLImageElement | null>(null)
+  const [images, setImages] = useState<Record<string, HTMLImageElement>>({})
   const [size, setSize] = useState({ width: 800, height: 560 })
   const [scale, setScale] = useState(1)
   const drawingRef = useRef(false)
 
   const selecting = selectionMode === 'rect' || selectionMode === 'brush'
+  const layerKey = layers.map((layer) => `${layer.id}:${layer.url}:${layer.visible}`).join('|')
 
   useEffect(() => {
-    // URL 变化时先清空，避免短暂显示旧图
-    setImage(null)
-    const img = new window.Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => setImage(img)
-    img.src = imageUrl
-  }, [imageUrl])
+    let cancelled = false
+    const next: Record<string, HTMLImageElement> = {}
+    const loaders = layers.map(
+      (layer) =>
+        new Promise<void>((resolve) => {
+          if (!layer.visible || !layer.url) {
+            resolve()
+            return
+          }
+          const img = new window.Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            next[layer.id] = img
+            resolve()
+          }
+          img.onerror = () => resolve()
+          img.src = layer.url
+        }),
+    )
+    void Promise.all(loaders).then(() => {
+      if (!cancelled) {
+        setImages(next)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [layerKey])
 
   useEffect(() => {
     const element = containerRef.current
@@ -72,7 +100,6 @@ export function CanvasStage({
     return () => observer.disconnect()
   }, [])
 
-  // 初始适配：让整图落在视口内
   const fitScale = useMemo(() => {
     if (canvasWidth <= 0 || canvasHeight <= 0) {
       return 1
@@ -85,12 +112,11 @@ export function CanvasStage({
 
   useEffect(() => {
     setScale(fitScale)
-  }, [fitScale, imageUrl])
+  }, [fitScale, layerKey])
 
   const offsetX = (size.width - canvasWidth * scale) / 2
   const offsetY = (size.height - canvasHeight * scale) / 2
 
-  /** 指针坐标 → 画布归一化 0～1 */
   function pointerNormalized(): [number, number] | null {
     const stage = stageRef.current
     if (!stage) {
@@ -104,7 +130,7 @@ export function CanvasStage({
   }
 
   return (
-    <div className={`canvas-wrap${selecting ? ' is-selecting' : ''}`} ref={containerRef}>
+    <div className={`canvas-wrap has-checkerboard${selecting ? ' is-selecting' : ''}`} ref={containerRef}>
       <Stage
         ref={stageRef}
         width={size.width}
@@ -191,9 +217,33 @@ export function CanvasStage({
         }}
       >
         <Layer>
-          {image && (
-            <KonvaImage image={image} width={canvasWidth} height={canvasHeight} />
-          )}
+          {/* 棋盘格提示透明区域 */}
+          <Rect
+            x={0}
+            y={0}
+            width={canvasWidth}
+            height={canvasHeight}
+            fillPatternImage={undefined}
+            fill="#e8edf3"
+            listening={false}
+          />
+          {layers.map((layer) => {
+            if (!layer.visible) {
+              return null
+            }
+            const image = images[layer.id]
+            if (!image) {
+              return null
+            }
+            return (
+              <KonvaImage
+                key={layer.id}
+                image={image}
+                width={canvasWidth}
+                height={canvasHeight}
+              />
+            )
+          })}
         </Layer>
         <Layer listening={false}>
           <SelectionOverlay

@@ -5,6 +5,7 @@ const TOOL_LABELS: Record<string, string> = {
   adjust_region: '局部提亮',
   remove_background: '去背景',
   flip_layer: '水平翻转',
+  split_layers: '拆层',
 }
 
 interface PlanCardProps {

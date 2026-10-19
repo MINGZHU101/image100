@@ -2,19 +2,23 @@
 
 import type { CanvasSelection } from '../types/selection'
 
+export interface LayerInfo {
+  id: string
+  name: string
+  asset_id: string
+  asset_key: string
+  visible: boolean
+  locked?: boolean
+}
+
 export interface SessionOut {
   id: string
   title: string | null
   document: {
     version: number
     canvas: { width: number; height: number }
-    layers: Array<{
-      id: string
-      name: string
-      asset_id: string
-      asset_key: string
-      visible: boolean
-    }>
+    layers: LayerInfo[]
+    active_layer_id?: string | null
     selection: CanvasSelection | null
   }
   created_at: string
@@ -59,3 +63,22 @@ export async function patchSelection(
   return response.json() as Promise<SessionOut>
 }
 
+/** 更新图层可见性 / 当前选中层 */
+export async function patchLayers(
+  sessionId: string,
+  body: {
+    layers?: Array<{ id: string; visible?: boolean }>
+    active_layer_id?: string | null
+  },
+): Promise<SessionOut> {
+  const response = await fetch(`/api/sessions/${sessionId}/layers`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`更新图层失败：${response.status} ${text}`)
+  }
+  return response.json() as Promise<SessionOut>
+}

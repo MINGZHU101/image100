@@ -58,7 +58,12 @@ def _canvas_context(document: dict | None) -> str:
     doc = document or {}
     canvas = doc.get("canvas") or {}
     layers = doc.get("layers") or []
-    main = layers[0] if layers else {}
+    layer_bits = []
+    for layer in layers:
+        visible = "显" if layer.get("visible", True) else "隐"
+        layer_bits.append(f"{layer.get('name')}({layer.get('id')},{visible})")
+    layers_text = "、".join(layer_bits) if layer_bits else "无"
+    active = doc.get("active_layer_id") or "无"
     selection = doc.get("selection")
     if selection and isinstance(selection, dict):
         sel_type = selection.get("type") or "unknown"
@@ -67,8 +72,8 @@ def _canvas_context(document: dict | None) -> str:
         selection_text = "选区：无"
     return (
         f"画布 {canvas.get('width')}×{canvas.get('height')}；"
-        f"主图层 asset_id={main.get('asset_id')}；"
-        f"可见层数={len(layers)}；"
+        f"图层：{layers_text}；"
+        f"当前层={active}；"
         f"{selection_text}"
     )
 

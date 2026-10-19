@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getSession, patchSelection, type SessionOut } from '../api/sessions'
+import {
+  getSession,
+  patchLayers,
+  patchSelection,
+  type SessionOut,
+} from '../api/sessions'
 import { AgentConversation } from '../components/editor/AgentConversation'
 import { CanvasStage } from '../components/editor/CanvasStage'
 import { EditorToolbar } from '../components/editor/EditorToolbar'
+import { LayerPanel } from '../components/editor/LayerPanel'
 import { ProgressBar } from '../components/editor/ProgressBar'
 import { useAgent } from '../hooks/useAgent'
 import { useSelection } from '../hooks/useSelection'
 import { useToolRun } from '../hooks/useToolRun'
 import type { CanvasSelection, SelectionMode } from '../types/selection'
 
-/** 编辑器页：选区 + 工具栏 + Agent 对话 + 画布 */
+/** 编辑器页：图层 + 选区 + 工具栏 + Agent */
 export function EditorPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const [session, setSession] = useState<SessionOut | null>(null)
@@ -39,9 +45,7 @@ export function EditorPage() {
     }
     const data = await getSession(sessionId)
     setSession(data)
-    // 工具成功后后端会清空选区，前端对齐
-    const remote = data.document.selection
-    selectionApi.replaceSelection(remote)
+    selectionApi.replaceSelection(data.document.selection)
   }, [sessionId, selectionApi.replaceSelection])
 
   useEffect(() => {
@@ -72,7 +76,6 @@ export function EditorPage() {
     return () => {
       cancelled = true
     }
-    // 仅随 sessionId 加载一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
@@ -94,17 +97,24 @@ export function EditorPage() {
     onCompleted,
   })
 
-  const mainLayer = session?.document.layers.find((layer) => layer.visible) ?? null
-  const imageUrl = mainLayer
-    ? `/api/assets/${mainLayer.asset_id}/file?t=${session?.updated_at ?? ''}`
-    : ''
+  const canvasLayers = useMemo(() => {
+    if (!session) {
+      return []
+    }
+    const stamp = session.updated_at ?? ''
+    return session.document.layers.map((layer) => ({
+      id: layer.id,
+      visible: layer.visible,
+      url: `/api/assets/${layer.asset_id}/file?t=${stamp}`,
+    }))
+  }, [session])
 
+  const hasLayers = (session?.document.layers.length ?? 0) > 0
   const toolsBusy = running || agent.busy
 
   const handleModeChange = useCallback(
     (mode: SelectionMode) => {
       selectionApi.setMode(mode)
-      // 切换到选区工具时清空远端选区，避免脏数据
       if (mode === 'rect' || mode === 'brush') {
         void syncSelection(null)
       }
@@ -129,13 +139,75 @@ export function EditorPage() {
 
   const handleRunTool = useCallback(
     async (name: string, params?: Record<string, unknown>) => {
-      // 局部提亮前再强制同步一次当前选区
       if (name === 'adjust_region') {
         await syncSelection(selectionApi.selection)
       }
       void runTool(name, params)
     },
     [runTool, selectionApi.selection, syncSelection],
+  )
+
+  const handleToggleVisible = useCallback(
+    async (layerId: string, visible: boolean) => {
+      if (!sessionId || !session) {
+        return
+      }
+      // 乐观更新
+      setSession({
+        ...session,
+        document: {
+          ...session.document,
+          layers: session.document.layers.map((layer) =>
+            layer.id === layerId ? { ...layer, visible } : layer,
+          ),
+        },
+      })
+      try {
+        const data = await patchLayers(sessionId, {
+          layers: [{ id: layerId, visible }],
+        })
+        setSession(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '更新图层失败')
+        await reloadSession()
+      }
+    },
+    [sessionId, session, reloadSession],
+  )
+
+  const handleSelectLayer = useCallback(
+    async (layerId: string) => {
+      if (!sessionId || !session) {
+        return
+      }
+      // 点选图层 = 设为当前编辑层，并独显该层（其它层隐藏），画布立即变化
+      const nextLayers = session.document.layers.map((layer) => ({
+        ...layer,
+        visible: layer.id === layerId,
+      }))
+      setSession({
+        ...session,
+        document: {
+          ...session.document,
+          layers: nextLayers,
+          active_layer_id: layerId,
+        },
+      })
+      try {
+        const data = await patchLayers(sessionId, {
+          active_layer_id: layerId,
+          layers: nextLayers.map((layer) => ({
+            id: layer.id,
+            visible: layer.visible,
+          })),
+        })
+        setSession(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '切换图层失败')
+        await reloadSession()
+      }
+    },
+    [sessionId, session, reloadSession],
   )
 
   return (
@@ -169,10 +241,21 @@ export function EditorPage() {
       {loading && <p className="muted">正在加载会话…</p>}
       {error && <p className="status-error">{error}</p>}
 
-      {!loading && !error && session && mainLayer && sessionId && (
-        <div className="editor-body">
+      {!loading && !error && session && hasLayers && sessionId && (
+        <div className="editor-body editor-body-with-layers">
+          <LayerPanel
+            layers={session.document.layers}
+            activeLayerId={session.document.active_layer_id}
+            disabled={toolsBusy}
+            onToggleVisible={(id, visible) => {
+              void handleToggleVisible(id, visible)
+            }}
+            onSelect={(id) => {
+              void handleSelectLayer(id)
+            }}
+          />
           <CanvasStage
-            imageUrl={imageUrl}
+            layers={canvasLayers}
             canvasWidth={session.document.canvas.width}
             canvasHeight={session.document.canvas.height}
             selectionMode={selectionApi.mode}

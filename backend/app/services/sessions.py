@@ -28,6 +28,7 @@ def build_document(asset_id: UUID, storage_key: str, width: int, height: int) ->
                 "visible": True,
             }
         ],
+        "active_layer_id": "layer_main",
         "selection": None,
     }
 
@@ -100,4 +101,46 @@ async def clear_selection(session: AsyncSession, session_id: UUID) -> None:
     flag_modified(row, "document")
     row.updated_at = datetime.now(timezone.utc)
     await session.commit()
+
+
+async def update_layers(
+    session: AsyncSession,
+    session_id: UUID,
+    *,
+    layer_patches: list[dict[str, Any]],
+    active_layer_id: str | None,
+) -> SessionOut:
+    """更新图层可见性与当前选中层。"""
+    row = await session.get(EditSession, session_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+
+    document = dict(row.document or {})
+    layers = list(document.get("layers") or [])
+    patch_map = {item["id"]: item for item in layer_patches}
+
+    new_layers: list[dict[str, Any]] = []
+    for layer in layers:
+        item = dict(layer)
+        patch = patch_map.get(str(item.get("id")))
+        if patch is not None and "visible" in patch and patch["visible"] is not None:
+            item["visible"] = bool(patch["visible"])
+        new_layers.append(item)
+
+    if active_layer_id is not None:
+        ids = {str(layer.get("id")) for layer in new_layers}
+        if active_layer_id not in ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"图层不存在：{active_layer_id}",
+            )
+        document["active_layer_id"] = active_layer_id
+
+    document["layers"] = new_layers
+    row.document = document
+    flag_modified(row, "document")
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    return to_session_out(row)
 

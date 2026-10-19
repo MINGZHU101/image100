@@ -8,12 +8,16 @@ class MockPlanner:
 
     async def plan(self, goal: str, context: str) -> tuple[str, list[dict]]:
         text = (goal or "").strip().lower()
-        # 同时保留中文原文匹配
         raw = goal or ""
         ctx = context or ""
         has_selection = "选区：有" in ctx
+        already_split = "layer_background" in ctx and "layer_subject" in ctx
 
         steps: list[dict] = []
+        want_split = any(
+            key in raw
+            for key in ("拆层", "分出主体", "分离背景", "主体和背景", "分开主体")
+        )
         want_matting = any(
             key in raw for key in ("去背", "抠图", "透明背景", "去掉背景", "去除背景")
         )
@@ -25,7 +29,11 @@ class MockPlanner:
         )
         want_flip = any(key in raw for key in ("翻转", "镜像", "水平翻"))
 
-        # 局部提亮：有选区才规划 adjust_region；无选区则提示
+        if want_split:
+            if already_split:
+                return ("画面已经拆成背景和主体了，可以直接在图层面板操作。", [])
+            steps.append({"tool_name": "split_layers", "params": {}})
+
         if want_bright and want_local:
             if not has_selection:
                 return (
@@ -44,7 +52,7 @@ class MockPlanner:
             )
             want_bright = False
 
-        if want_matting:
+        if want_matting and not want_split:
             steps.append({"tool_name": "remove_background", "params": {}})
         if want_bright:
             steps.append(
@@ -60,8 +68,11 @@ class MockPlanner:
         if want_flip:
             steps.append({"tool_name": "flip_layer", "params": {}})
 
-        # 英文兜底
         if not steps:
+            if "split" in text or "layer" in text:
+                if already_split:
+                    return ("画面已经拆层，可在图层面板切换显隐。", [])
+                steps.append({"tool_name": "split_layers", "params": {}})
             if "background" in text or "matting" in text:
                 steps.append({"tool_name": "remove_background", "params": {}})
             if ("region" in text or "local" in text) and (
@@ -98,7 +109,7 @@ class MockPlanner:
 
         if not steps:
             return (
-                "没识别出可用的修图步骤。可以试试「去背」「提亮」「局部提亮」「翻转」，或点工具栏。",
+                "没识别出可用的修图步骤。可以试试「拆层」「去背」「提亮」「局部提亮」「翻转」。",
                 [],
             )
 
@@ -113,6 +124,8 @@ class MockPlanner:
                 labels.append("局部提亮")
             elif name == "flip_layer":
                 labels.append("水平翻转")
+            elif name == "split_layers":
+                labels.append("拆层")
             else:
                 labels.append(name)
 

@@ -38,6 +38,7 @@ export function EditorToolbar({
             { name: 'adjust_region', label: '局部提亮', description: '' },
             { name: 'remove_background', label: '去背景', description: '' },
             { name: 'flip_layer', label: '水平翻转', description: '' },
+            { name: 'split_layers', label: '拆层', description: '' },
           ])
         }
       })
