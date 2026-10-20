@@ -10,7 +10,6 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID
 from app.edits import split as split_edits
 from app.events import publish_event
 from app.layers import resolve_target_layer
@@ -147,7 +146,7 @@ async def write_result_asset(
 
     asset = Asset(
         id=asset_id,
-        owner_id=UUID(DEMO_USER_ID),
+        owner_id=edit_session.owner_id,
         storage_key=storage_key,
         width=width,
         height=height,

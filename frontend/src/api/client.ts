@@ -1,9 +1,13 @@
 export class ApiError extends Error {
   status: number
+  code?: string
+  payload?: Record<string, unknown>
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string, payload?: Record<string, unknown>) {
     super(message)
     this.status = status
+    this.code = code
+    this.payload = payload
   }
 }
 
@@ -22,13 +26,34 @@ function formatDetail(detail: unknown, fallback: string): string {
   if (Array.isArray(detail)) {
     return detail.map(messageOf).filter(Boolean).join('；') || fallback
   }
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    return messageOf((detail as { message: unknown }).message) || fallback
+  }
   return messageOf(detail) || fallback
+}
+
+function detailCode(detail: unknown): string | undefined {
+  if (detail && typeof detail === 'object' && 'code' in detail) {
+    const code = (detail as { code?: unknown }).code
+    return typeof code === 'string' ? code : undefined
+  }
+  return undefined
 }
 
 /** 上传与下载走原生 fetch，错误一律经这里构造，文案格式与 JSON 请求保持一致。 */
 export async function apiError(response: Response, fallback: string): Promise<ApiError> {
   const body = await response.json().catch(() => null)
-  return new ApiError(response.status, formatDetail(body?.detail, fallback))
+  const detail = body?.detail
+  const payload =
+    detail && typeof detail === 'object' && !Array.isArray(detail)
+      ? (detail as Record<string, unknown>)
+      : undefined
+  const code = detailCode(detail)
+  const message = formatDetail(detail, fallback)
+  if (code === 'POINTS_INSUFFICIENT' && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('points-insufficient', { detail: message }))
+  }
+  return new ApiError(response.status, message, code, payload)
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

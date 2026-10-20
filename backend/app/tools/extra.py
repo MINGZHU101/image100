@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID
 from app.edits import geometry, region_ops
 from app.models.asset import Asset
 from app.models.edit_session import EditSession
@@ -22,7 +21,10 @@ from app.tools.base import ToolSpec
 
 
 class CropParams(BaseModel):
+    # 归一化 0～1；若误传像素坐标（>1）会在算法侧自动换算
     rect: dict[str, float] | None = None
+    # 如 "1:1"：无 rect 时按比例居中裁剪（适合「裁出中心」）
+    ratio: str | None = None
 
 
 class UpscaleParams(BaseModel):
@@ -102,12 +104,17 @@ async def _require_selection(session: AsyncSession, run: ToolRun) -> dict:
 
 async def _crop_handler(session: AsyncSession, run: ToolRun) -> dict[str, Any]:
     params = CropParams.model_validate(run.params or {})
-    if not params.rect:
-        raise ValueError("缺少裁剪框")
+    if not params.rect and not params.ratio:
+        # 默认中心 1:1，避免 Agent 只说「裁中心」却不带参数
+        params = CropParams(ratio="1:1")
     await runs_service.report_progress(session, run, 20, "读取图层")
     source = await runs_service.load_target_layer_bytes(session, run.session_id)
     await runs_service.report_progress(session, run, 60, "裁剪")
-    output = await asyncio.to_thread(geometry.crop_normalized, source, params.rect)
+    if params.rect:
+        output = await asyncio.to_thread(geometry.crop_normalized, source, params.rect)
+    else:
+        rw, rh = _parse_ratio(params.ratio or "1:1")
+        output = await asyncio.to_thread(geometry.crop_by_ratio, source, rw, rh)
     asset_id = await runs_service.write_result_asset(session, run, output, mime="image/png")
     return {"asset_id": str(asset_id)}
 
@@ -170,7 +177,7 @@ async def _replace_region_handler(session: AsyncSession, run: ToolRun) -> dict[s
     return {"asset_id": str(asset_id)}
 
 
-async def _store_png(session: AsyncSession, data: bytes) -> Asset:
+async def _store_png(session: AsyncSession, data: bytes, owner_id: uuid.UUID) -> Asset:
     from PIL import Image
     import io
 
@@ -182,7 +189,7 @@ async def _store_png(session: AsyncSession, data: bytes) -> Asset:
     get_storage().put(storage_key, data, "image/png")
     asset = Asset(
         id=asset_id,
-        owner_id=uuid.UUID(DEMO_USER_ID),
+        owner_id=owner_id,
         storage_key=storage_key,
         width=width,
         height=height,
@@ -202,7 +209,7 @@ async def _promote_handler(session: AsyncSession, run: ToolRun) -> dict[str, Any
     await runs_service.report_progress(session, run, 20, "抠选区")
     source = await runs_service.load_target_layer_bytes(session, run.session_id)
     cut = await asyncio.to_thread(region_ops.cutout_region, source, selection)
-    asset = await _store_png(session, cut)
+    asset = await _store_png(session, cut, edit_session.owner_id)
 
     before = history_service.snapshot_document(edit_session.document)
     document = dict(edit_session.document or {})
@@ -378,7 +385,11 @@ async def _text_handler(session: AsyncSession, run: ToolRun) -> dict[str, Any]:
 CROP_CANVAS = ToolSpec(
     name="crop_canvas",
     label="裁剪",
-    description="按框裁剪当前目标层",
+    description=(
+        "裁剪当前目标层。优先传 ratio（如 1:1 居中裁切）；"
+        "或传 rect（x/y/width/height，取值 0～1 归一化）。"
+        "不要传像素坐标；若误传像素会自动换算。"
+    ),
     params_model=CropParams,
     handler=_crop_handler,
 )

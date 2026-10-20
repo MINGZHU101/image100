@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID
+from app.models import User
 from app.models.edit_session import EditSession
 from app.schemas.session import SessionOut
 from app.services.assets import get_asset_or_404
@@ -43,10 +43,10 @@ def to_session_out(row: EditSession) -> SessionOut:
     )
 
 
-async def create_session(session: AsyncSession, asset_id: UUID) -> SessionOut:
+async def create_session(session: AsyncSession, user: User, asset_id: UUID) -> SessionOut:
     from app.services import history as history_service
 
-    asset = await get_asset_or_404(session, asset_id)
+    asset = await get_asset_or_404(session, asset_id, user)
     document = build_document(
         asset_id=asset.id,
         storage_key=asset.storage_key,
@@ -54,7 +54,7 @@ async def create_session(session: AsyncSession, asset_id: UUID) -> SessionOut:
         height=asset.height,
     )
     row = EditSession(
-        owner_id=UUID(DEMO_USER_ID),
+        owner_id=user.id,
         title="商品编辑",
         document=document,
         history_seq=1,
@@ -66,11 +66,21 @@ async def create_session(session: AsyncSession, asset_id: UUID) -> SessionOut:
     return to_session_out(row)
 
 
-async def get_session(session: AsyncSession, session_id: UUID) -> SessionOut:
+async def get_session_row(
+    session: AsyncSession, session_id: UUID, user: User | None = None
+) -> EditSession:
     row = await session.get(EditSession, session_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-    return to_session_out(row)
+    if user is not None and row.owner_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    return row
+
+
+async def get_session(
+    session: AsyncSession, session_id: UUID, user: User | None = None
+) -> SessionOut:
+    return to_session_out(await get_session_row(session, session_id, user))
 
 
 async def update_selection(

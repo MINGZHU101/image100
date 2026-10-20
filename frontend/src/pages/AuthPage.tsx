@@ -17,19 +17,13 @@ const COPY: Record<Mode, { title: string; submit: string; switchTo: Mode; switch
   },
 }
 
-// 与后端 Credentials 一致，注册时先在浏览器拦下，不用等一次请求。登录不限长度，老账号也进得来。
-const RULES: Record<Mode, { username: Rules; password: Rules }> = {
-  login: { username: {}, password: {} },
-  register: {
-    username: {
-      minLength: 3,
-      maxLength: 32,
-      pattern: '[\\p{L}\\p{N}_]{3,32}',
-      title: '3–32 位字母、数字或下划线',
-    },
-    password: { minLength: 6, maxLength: 64, title: '6–64 位' },
-  },
+const ACCOUNT_RULES: Rules = {
+  minLength: 3,
+  maxLength: 32,
+  pattern: '[A-Za-z0-9_]{3,32}',
+  title: '3–32 位字母、数字或下划线',
 }
+const PASSWORD_RULES: Rules = { minLength: 6, maxLength: 64, title: '6–64 位' }
 
 export default function AuthPage() {
   const [params, setParams] = useSearchParams()
@@ -41,18 +35,48 @@ export default function AuthPage() {
   const { login, register } = useAuthActions()
   const action = mode === 'login' ? login : register
 
-  const [username, setUsername] = useState('')
+  const [account, setAccount] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
+  const [localError, setLocalError] = useState('')
 
   if (!isLoading && user) return <Navigate to="/create" replace />
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
-    action.mutate({ username, password }, { onSuccess: () => navigate('/create', { replace: true }) })
+    setLocalError('')
+    if (mode === 'register') {
+      if (password !== passwordConfirm) {
+        setLocalError('两次输入的密码不一致')
+        return
+      }
+      register.mutate(
+        {
+          account,
+          display_name: displayName,
+          password,
+          password_confirm: passwordConfirm,
+          invite_code: inviteCode.trim() || undefined,
+        },
+        { onSuccess: () => navigate('/create', { replace: true }) },
+      )
+      return
+    }
+    login.mutate(
+      {
+        account,
+        password,
+        invite_code: inviteCode.trim() || undefined,
+      },
+      { onSuccess: () => navigate('/create', { replace: true }) },
+    )
   }
 
   const switchMode = () => {
     action.reset()
+    setLocalError('')
     setParams({ mode: copy.switchTo })
   }
 
@@ -74,13 +98,23 @@ export default function AuthPage() {
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <Field
-              label="用户名"
-              value={username}
-              onChange={setUsername}
+              label="账号"
+              value={account}
+              onChange={setAccount}
               autoComplete="username"
-              placeholder="3–32 位字母、数字或下划线"
-              rules={RULES[mode].username}
+              placeholder="登录用，字母数字下划线"
+              rules={mode === 'register' ? ACCOUNT_RULES : undefined}
             />
+            {mode === 'register' && (
+              <Field
+                label="用户名"
+                value={displayName}
+                onChange={setDisplayName}
+                autoComplete="nickname"
+                placeholder="展示名称，可中文"
+                rules={{ minLength: 1, maxLength: 32 }}
+              />
+            )}
             <Field
               label="密码"
               type="password"
@@ -88,10 +122,31 @@ export default function AuthPage() {
               onChange={setPassword}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               placeholder="至少 6 位"
-              rules={RULES[mode].password}
+              rules={mode === 'register' ? PASSWORD_RULES : undefined}
+            />
+            {mode === 'register' && (
+              <Field
+                label="确认密码"
+                type="password"
+                value={passwordConfirm}
+                onChange={setPasswordConfirm}
+                autoComplete="new-password"
+                placeholder="再次输入密码"
+                rules={PASSWORD_RULES}
+              />
+            )}
+            <Field
+              label="邀请码（可选）"
+              value={inviteCode}
+              onChange={setInviteCode}
+              autoComplete="off"
+              placeholder="五位字母数字"
+              required={false}
             />
 
-            {action.isError && <p className="text-danger text-sm">{errorMessage(action.error)}</p>}
+            {(localError || action.isError) && (
+              <p className="text-danger text-sm">{localError || errorMessage(action.error)}</p>
+            )}
 
             <button
               type="submit"
@@ -108,7 +163,7 @@ export default function AuthPage() {
               disabled={login.isPending}
               onClick={() =>
                 login.mutate(
-                  { username: 'demo', password: 'demo123' },
+                  { account: 'demo', password: 'demo123' },
                   { onSuccess: () => navigate('/create', { replace: true }) },
                 )
               }
@@ -139,6 +194,7 @@ function Field({
   autoComplete,
   placeholder,
   rules,
+  required = true,
 }: {
   label: string
   value: string
@@ -147,6 +203,7 @@ function Field({
   autoComplete?: string
   placeholder?: string
   rules?: Rules
+  required?: boolean
 }) {
   return (
     <label className="block">
@@ -157,7 +214,7 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
         autoComplete={autoComplete}
         placeholder={placeholder}
-        required
+        required={required}
         {...rules}
         className="border-line bg-paper text-ink placeholder:text-faint focus:border-brand rounded-control w-full border px-3.5 py-2.5 text-sm outline-none transition-colors"
       />

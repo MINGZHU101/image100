@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID
 from app.edits import split as split_edits
 from app.layers import (
     LAYER_MAIN_ID,
@@ -30,7 +29,7 @@ class SplitLayersParams(BaseModel):
     force: bool = Field(default=False)
 
 
-async def _store_png(session: AsyncSession, data: bytes) -> Asset:
+async def _store_png(session: AsyncSession, data: bytes, owner_id: uuid.UUID) -> Asset:
     from PIL import Image
     import io
 
@@ -43,7 +42,7 @@ async def _store_png(session: AsyncSession, data: bytes) -> Asset:
     get_storage().put(storage_key, data, "image/png")
     asset = Asset(
         id=asset_id,
-        owner_id=uuid.UUID(DEMO_USER_ID),
+        owner_id=owner_id,
         storage_key=storage_key,
         width=width,
         height=height,
@@ -83,8 +82,8 @@ async def _split_layers_handler(session: AsyncSession, run: ToolRun) -> dict[str
     )
 
     await runs_service.report_progress(session, run, 70, "写入图层资产")
-    background_asset = await _store_png(session, background_png)
-    subject_asset = await _store_png(session, subject_png)
+    background_asset = await _store_png(session, background_png, edit_session.owner_id)
+    subject_asset = await _store_png(session, subject_png, edit_session.owner_id)
 
     from app.services import history as history_service
 

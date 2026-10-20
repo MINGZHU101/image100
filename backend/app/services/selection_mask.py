@@ -11,7 +11,6 @@ from PIL import Image, ImageDraw
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID
 from app.models.asset import Asset
 from app.models.edit_session import EditSession
 from app.services.assets import asset_file_url
@@ -111,7 +110,7 @@ async def apply_brush_selection(
     get_storage().put(storage_key, mask_bytes, "image/png")
     asset = Asset(
         id=asset_id,
-        owner_id=UUID(DEMO_USER_ID),
+        owner_id=row.owner_id,
         storage_key=storage_key,
         width=width,
         height=height,
@@ -208,7 +207,7 @@ async def apply_point_selection(
     get_storage().put(storage_key, mask_bytes, "image/png")
     asset = Asset(
         id=asset_id,
-        owner_id=UUID(DEMO_USER_ID),
+        owner_id=row.owner_id,
         storage_key=storage_key,
         width=width,
         height=height,

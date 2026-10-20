@@ -6,8 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.deps import DbDep
+from app.deps import CurrentUser, DbDep
+from app.membership_rules import COST_GENERATION
 from app.schemas.generation import GenerationRunOut, ImageProviderOptionsOut
+from app.services import billing
 from app.services import generation as generation_service
 from app.services import tools as tools_service
 
@@ -39,14 +41,24 @@ async def get_provider_options() -> ImageProviderOptionsOut:
 
 
 @router.post("")
-async def create_generation(body: GenerateCompatIn, db: DbDep) -> dict[str, Any]:
+async def create_generation(
+    body: GenerateCompatIn, db: DbDep, user: CurrentUser
+) -> dict[str, Any]:
     """创建后返回原仓 Run 形状，便于 Create/Candidates 页直接订阅。"""
     if body.width and body.height:
         width, height = body.width, body.height
     else:
         width, height = _RATIO_SIZE.get(body.ratio or "1:1", (1024, 1024))
+    await billing.charge_ai_operation(
+        db,
+        user,
+        cost=COST_GENERATION,
+        kind="consume_generation",
+        remark="文生图",
+    )
     created = await generation_service.create_generation(
         db,
+        user,
         prompt=body.prompt,
         width=width,
         height=height,

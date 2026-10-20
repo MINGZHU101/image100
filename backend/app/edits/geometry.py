@@ -11,19 +11,72 @@ def _png(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+def _as_normalized_rect(
+    rect: dict[str, float], width: int, height: int
+) -> dict[str, float]:
+    """
+    统一成 0～1 归一化框。
+    Agent 常误传像素坐标（如 x=134, width=200）；任一分量 >1 时按像素换算。
+    """
+    x = float(rect.get("x", 0))
+    y = float(rect.get("y", 0))
+    w = float(rect.get("width", 0))
+    h = float(rect.get("height", 0))
+    looks_like_pixels = max(abs(x), abs(y), abs(w), abs(h)) > 1.0 + 1e-6
+    if looks_like_pixels:
+        if width <= 0 or height <= 0:
+            raise ValueError("图片尺寸无效，无法换算裁剪框")
+        x, y, w, h = x / width, y / height, w / width, h / height
+
+    # 钳制到画布内，避免越界放大
+    x = min(max(x, 0.0), 0.999)
+    y = min(max(y, 0.0), 0.999)
+    w = min(max(w, 0.001), 1.0 - x)
+    h = min(max(h, 0.001), 1.0 - y)
+    return {"x": x, "y": y, "width": w, "height": h}
+
+
+def _center_rect_for_ratio(
+    width: int, height: int, ratio_w: int, ratio_h: int
+) -> dict[str, float]:
+    """按目标比例取画布内最大居中框（归一化）。"""
+    target = ratio_w / ratio_h
+    current = width / height if height else 1.0
+    if current >= target:
+        # 更宽：以高为边，左右裁
+        norm_h = 1.0
+        norm_w = target * height / width
+        return {"x": (1.0 - norm_w) / 2, "y": 0.0, "width": norm_w, "height": norm_h}
+    norm_w = 1.0
+    norm_h = (width / target) / height
+    return {"x": 0.0, "y": (1.0 - norm_h) / 2, "width": norm_w, "height": norm_h}
+
+
 def crop_normalized(data: bytes, rect: dict[str, float]) -> bytes:
-    """按归一化 rect 裁剪。"""
+    """按 rect 裁剪；自动兼容归一化坐标与像素坐标。"""
     with Image.open(io.BytesIO(data)) as image:
         image.load()
         width, height = image.size
-        left = int(rect["x"] * width)
-        top = int(rect["y"] * height)
-        right = int((rect["x"] + rect["width"]) * width)
-        bottom = int((rect["y"] + rect["height"]) * height)
-        right = max(right, left + 1)
-        bottom = max(bottom, top + 1)
+        box = _as_normalized_rect(rect, width, height)
+        left = int(box["x"] * width)
+        top = int(box["y"] * height)
+        right = int((box["x"] + box["width"]) * width)
+        bottom = int((box["y"] + box["height"]) * height)
+        left = max(0, min(left, width - 1))
+        top = max(0, min(top, height - 1))
+        right = max(left + 1, min(right, width))
+        bottom = max(top + 1, min(bottom, height))
         cropped = image.crop((left, top, right, bottom))
         return _png(cropped.convert("RGBA"))
+
+
+def crop_by_ratio(data: bytes, ratio_w: int, ratio_h: int) -> bytes:
+    """按比例居中裁剪（如 1:1 取中心正方形）。"""
+    with Image.open(io.BytesIO(data)) as image:
+        image.load()
+        width, height = image.size
+        box = _center_rect_for_ratio(width, height, ratio_w, ratio_h)
+    return crop_normalized(data, box)
 
 
 def upscale(data: bytes, scale: int = 2) -> bytes:

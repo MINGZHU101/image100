@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { authApi, type Credentials, type User } from '@/api/auth'
+import { authApi, type LoginBody, type RegisterBody, type User } from '@/api/auth'
 import { ApiError } from '@/api/client'
 
 const ME_KEY = ['auth', 'me']
@@ -23,11 +23,11 @@ export function useAuthActions() {
   const cacheUser = (user: User) => queryClient.setQueryData(ME_KEY, user)
 
   const login = useMutation({
-    mutationFn: (body: Credentials) => authApi.login(body),
+    mutationFn: (body: LoginBody) => authApi.login(body),
     onSuccess: cacheUser,
   })
   const register = useMutation({
-    mutationFn: (body: Credentials) => authApi.register(body),
+    mutationFn: (body: RegisterBody) => authApi.register(body),
     onSuccess: cacheUser,
   })
   const logout = useMutation({
@@ -35,10 +35,14 @@ export function useAuthActions() {
     onSuccess: () => queryClient.clear(),
   })
 
-  return { login, register, logout }
+  return { login, register, logout, cacheUser }
 }
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message
   return error instanceof Error ? error.message : '请求失败，请稍后重试'
+}
+
+export function isPointsInsufficient(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'POINTS_INSUFFICIENT'
 }

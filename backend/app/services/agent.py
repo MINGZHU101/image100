@@ -5,6 +5,7 @@ import logging
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -23,6 +24,18 @@ from app.schemas.agent import (
 from app.services import tools as tools_service
 
 logger = logging.getLogger(__name__)
+
+
+async def _cancel_stale_planned(session: AsyncSession, session_id: UUID) -> None:
+    """新对话到来时，作废同会话里尚未确认的旧计划，避免 UI 堆积。"""
+    await session.execute(
+        update(AgentRun)
+        .where(
+            AgentRun.session_id == session_id,
+            AgentRun.status == "planned",
+        )
+        .values(status="cancelled", error="已被新对话取代")
+    )
 
 
 def planner_options() -> PlannerOptionsOut:
@@ -104,6 +117,8 @@ async def create_agent_run(
     edit_session = await session.get(EditSession, session_id)
     if edit_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+
+    await _cancel_stale_planned(session, session_id)
 
     provider = _resolve_provider(planner_provider)
     context = _canvas_context(edit_session.document)

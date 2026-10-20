@@ -23,7 +23,7 @@ export default function LandingPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <LandingHeader account={user?.username ?? null} />
+      <LandingHeader account={user?.display_name ?? user?.username ?? null} />
 
       <main className="flex-1">
         <LandingHero

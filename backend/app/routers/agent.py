@@ -7,8 +7,10 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.deps import DbDep
+from app.deps import CurrentUser, DbDep, assert_owner
+from app.membership_rules import COST_AGENT_TURN
 from app.models.agent_run import AgentRun
+from app.models.edit_session import EditSession
 from app.schemas.agent import (
     AgentConfirmOut,
     AgentCreateIn,
@@ -16,6 +18,15 @@ from app.schemas.agent import (
     PlannerOptionsOut,
 )
 from app.services import agent as agent_service
+from app.services import billing
+
+
+async def _owned_session(db: DbDep, session_id: UUID, user: CurrentUser) -> EditSession:
+    row = await db.get(EditSession, session_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    assert_owner(row.owner_id, user, detail="会话不存在")
+    return row
 
 router = APIRouter(tags=["agent"])
 
@@ -92,7 +103,16 @@ async def create_agent_run(
     session_id: UUID,
     body: AgentCreateIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> AgentRunOut:
+    await _owned_session(db, session_id, user)
+    await billing.charge_ai_operation(
+        db,
+        user,
+        cost=COST_AGENT_TURN,
+        kind="consume_agent",
+        remark="Agent 规划",
+    )
     return await agent_service.create_agent_run(
         db,
         session_id,
@@ -109,8 +129,9 @@ async def get_agent_run(
     session_id: UUID,
     agent_run_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> AgentRunOut:
-    del session_id
+    await _owned_session(db, session_id, user)
     return await agent_service.get_agent_run(db, agent_run_id)
 
 
@@ -122,7 +143,9 @@ async def confirm_agent_run(
     session_id: UUID,
     agent_run_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> AgentConfirmOut:
+    await _owned_session(db, session_id, user)
     return await agent_service.confirm_agent_run(db, session_id, agent_run_id)
 
 
@@ -134,7 +157,9 @@ async def cancel_agent_run(
     session_id: UUID,
     agent_run_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> AgentRunOut:
+    await _owned_session(db, session_id, user)
     return await agent_service.cancel_agent_run(db, session_id, agent_run_id)
 
 
@@ -142,7 +167,10 @@ async def cancel_agent_run(
 
 
 @router.get("/sessions/{session_id}/messages")
-async def list_messages(session_id: UUID, db: DbDep) -> list[dict[str, Any]]:
+async def list_messages(
+    session_id: UUID, db: DbDep, user: CurrentUser
+) -> list[dict[str, Any]]:
+    await _owned_session(db, session_id, user)
     result = await db.execute(
         select(AgentRun)
         .where(AgentRun.session_id == session_id)
@@ -156,7 +184,16 @@ async def send_message(
     session_id: UUID,
     body: MessageCreateIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
+    await _owned_session(db, session_id, user)
+    await billing.charge_ai_operation(
+        db,
+        user,
+        cost=COST_AGENT_TURN,
+        kind="consume_agent",
+        remark="Agent 对话",
+    )
     created = await agent_service.create_agent_run(db, session_id, body.text, None)
     row = await db.get(AgentRun, created.id)
     assert row is not None
@@ -168,7 +205,9 @@ async def confirm_message(
     session_id: UUID,
     turn_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
+    await _owned_session(db, session_id, user)
     await agent_service.confirm_agent_run(db, session_id, turn_id)
     row = await db.get(AgentRun, turn_id)
     assert row is not None
@@ -180,7 +219,9 @@ async def cancel_message(
     session_id: UUID,
     turn_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
+    await _owned_session(db, session_id, user)
     await agent_service.cancel_agent_run(db, session_id, turn_id)
     row = await db.get(AgentRun, turn_id)
     assert row is not None
@@ -192,11 +233,20 @@ async def retry_message(
     session_id: UUID,
     turn_id: UUID,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
     """重试：用原 goal 再规划一轮。"""
+    await _owned_session(db, session_id, user)
     old = await db.get(AgentRun, turn_id)
     if old is None or old.session_id != session_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+    await billing.charge_ai_operation(
+        db,
+        user,
+        cost=COST_AGENT_TURN,
+        kind="consume_agent",
+        remark="Agent 重试",
+    )
     created = await agent_service.create_agent_run(
         db,
         session_id,

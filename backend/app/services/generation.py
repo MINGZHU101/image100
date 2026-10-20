@@ -10,8 +10,9 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import DEMO_USER_ID, get_settings
+from app.config import get_settings
 from app.events import publish_event
+from app.models import User
 from app.models.asset import Asset
 from app.models.generation_run import GenerationRun
 from app.providers.image import ImageProviderError, get_image_provider
@@ -70,6 +71,7 @@ def _to_out(row: GenerationRun) -> GenerationRunOut:
 
 async def create_generation(
     session: AsyncSession,
+    user: User,
     *,
     prompt: str,
     width: int,
@@ -79,6 +81,7 @@ async def create_generation(
 ) -> GenerationCreateOut:
     provider = _resolve_provider(image_provider)
     row = GenerationRun(
+        owner_id=user.id,
         prompt=prompt.strip(),
         params={"width": width, "height": height, "count": count},
         image_provider=provider,
@@ -152,10 +155,15 @@ async def execute_generation(session: AsyncSession, generation_id: UUID) -> dict
         asset_id = uuid.uuid4()
         storage_key = f"objects/{asset_id}.png"
         storage.put(storage_key, data, "image/png")
+        owner_id = row.owner_id
+        if owner_id is None:
+            from app.config import DEMO_USER_ID
+
+            owner_id = UUID(DEMO_USER_ID)
         session.add(
             Asset(
                 id=asset_id,
-                owner_id=UUID(DEMO_USER_ID),
+                owner_id=owner_id,
                 storage_key=storage_key,
                 width=width,
                 height=height,

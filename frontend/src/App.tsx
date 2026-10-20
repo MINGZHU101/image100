@@ -1,7 +1,13 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
+import AccountLayout from '@/layouts/AccountLayout'
 import RequireAuth from '@/layouts/RequireAuth'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout'
+import AccountInvitePage from '@/pages/account/AccountInvitePage'
+import AccountOverviewPage from '@/pages/account/AccountOverviewPage'
+import AccountPointsPage from '@/pages/account/AccountPointsPage'
+import AccountProfilePage from '@/pages/account/AccountProfilePage'
+import AccountSecurityPage from '@/pages/account/AccountSecurityPage'
 import AuthPage from '@/pages/AuthPage'
 import BatchPage from '@/pages/BatchPage'
 import CandidatesPage from '@/pages/CandidatesPage'
@@ -27,6 +33,13 @@ export default function App() {
             <Route path="/batch" element={<BatchPage />} />
             <Route path="/batch/:runId" element={<BatchPage />} />
             <Route path="/candidates/:runId" element={<CandidatesPage />} />
+            <Route path="/account" element={<AccountLayout />}>
+              <Route index element={<AccountOverviewPage />} />
+              <Route path="profile" element={<AccountProfilePage />} />
+              <Route path="points" element={<AccountPointsPage />} />
+              <Route path="invite" element={<AccountInvitePage />} />
+              <Route path="security" element={<AccountSecurityPage />} />
+            </Route>
           </Route>
         </Route>
 

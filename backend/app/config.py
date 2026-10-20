@@ -66,6 +66,15 @@ class Settings(BaseSettings):
         "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     )
 
+    # v10：JWT 会话
+    jwt_secret: str = "dev-only-secret-please-change-in-production"
+    jwt_ttl_hours: int = 24
+
+    # v10：LangSmith（环境变量亦可直接被 SDK 读取；此处便于文档与开关）
+    langsmith_tracing: bool = False
+    langsmith_api_key: str = ""
+    langsmith_project: str = "image100"
+
     @field_validator("cors_origins", mode="before")
 
     @classmethod

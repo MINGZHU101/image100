@@ -9,7 +9,8 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import DEMO_USER_ID, get_settings
+from app.config import get_settings
+from app.models import User
 from app.models.asset import Asset
 from app.schemas.asset import AssetOut
 from app.storage import get_storage
@@ -38,7 +39,7 @@ def to_asset_out(asset: Asset) -> AssetOut:
     )
 
 
-async def upload_asset(session: AsyncSession, upload: UploadFile) -> AssetOut:
+async def upload_asset(session: AsyncSession, user: User, upload: UploadFile) -> AssetOut:
     """校验并保存上传图片，写入磁盘与数据库。"""
     settings = get_settings()
     content_type = (upload.content_type or "").split(";")[0].strip().lower()
@@ -84,7 +85,7 @@ async def upload_asset(session: AsyncSession, upload: UploadFile) -> AssetOut:
 
     asset = Asset(
         id=asset_id,
-        owner_id=UUID(DEMO_USER_ID),
+        owner_id=user.id,
         storage_key=storage_key,
         width=width,
         height=height,
@@ -96,16 +97,22 @@ async def upload_asset(session: AsyncSession, upload: UploadFile) -> AssetOut:
     return to_asset_out(asset)
 
 
-async def list_assets(session: AsyncSession) -> list[AssetOut]:
+async def list_assets(session: AsyncSession, user: User) -> list[AssetOut]:
     result = await session.execute(
-        select(Asset).order_by(Asset.created_at.desc())
+        select(Asset)
+        .where(Asset.owner_id == user.id)
+        .order_by(Asset.created_at.desc())
     )
     rows = result.scalars().all()
     return [to_asset_out(item) for item in rows]
 
 
-async def get_asset_or_404(session: AsyncSession, asset_id: UUID) -> Asset:
+async def get_asset_or_404(
+    session: AsyncSession, asset_id: UUID, user: User | None = None
+) -> Asset:
     asset = await session.get(Asset, asset_id)
     if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="资产不存在")
+    if user is not None and asset.owner_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="资产不存在")
     return asset

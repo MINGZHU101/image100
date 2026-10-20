@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.compat.session_detail import build_session_detail
-from app.deps import DbDep
+from app.deps import CurrentUser, DbDep, assert_owner
 from app.models.edit_session import EditSession
 from app.schemas.layers import LayersPatchIn
 from app.schemas.selection import SelectionPatchIn
@@ -53,14 +53,24 @@ class ExportCompatIn(BaseModel):
     asset_ids: list[UUID] = Field(default_factory=list)
 
 
+async def _owned_session(db: DbDep, session_id: UUID, user: CurrentUser) -> EditSession:
+    row = await db.get(EditSession, session_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    assert_owner(row.owner_id, user, detail="会话不存在")
+    return row
+
+
 @router.post("")
-async def create_session(body: SessionCreateCompatIn, db: DbDep) -> dict[str, Any]:
+async def create_session(
+    body: SessionCreateCompatIn, db: DbDep, user: CurrentUser
+) -> dict[str, Any]:
     asset_id = body.asset_id or body.current_asset_id
     if asset_id is None and body.asset_ids:
         asset_id = body.asset_ids[0]
     if asset_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 asset_id")
-    created = await sessions_service.create_session(db, asset_id)
+    created = await sessions_service.create_session(db, user, asset_id)
     if body.title:
         row = await db.get(EditSession, created.id)
         if row is not None:
@@ -74,9 +84,12 @@ async def create_session(body: SessionCreateCompatIn, db: DbDep) -> dict[str, An
 
 
 @router.get("")
-async def list_sessions(db: DbDep) -> list[dict[str, Any]]:
+async def list_sessions(db: DbDep, user: CurrentUser) -> list[dict[str, Any]]:
     result = await db.execute(
-        select(EditSession).order_by(EditSession.updated_at.desc()).limit(50)
+        select(EditSession)
+        .where(EditSession.owner_id == user.id)
+        .order_by(EditSession.updated_at.desc())
+        .limit(50)
     )
     rows = list(result.scalars().all())
     items: list[dict[str, Any]] = []
@@ -98,10 +111,8 @@ async def list_sessions(db: DbDep) -> list[dict[str, Any]]:
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: UUID, db: DbDep) -> dict[str, Any]:
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+async def get_session(session_id: UUID, db: DbDep, user: CurrentUser) -> dict[str, Any]:
+    row = await _owned_session(db, session_id, user)
     return await build_session_detail(db, row)
 
 
@@ -110,10 +121,9 @@ async def patch_session(
     session_id: UUID,
     body: SessionPatchCompatIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    row = await _owned_session(db, session_id, user)
     if body.title is not None:
         row.title = body.title[:128]
         await db.commit()
@@ -123,12 +133,12 @@ async def patch_session(
 
 
 @router.get("/{session_id}/history")
-async def session_history(session_id: UUID, db: DbDep) -> list[dict[str, Any]]:
+async def session_history(
+    session_id: UUID, db: DbDep, user: CurrentUser
+) -> list[dict[str, Any]]:
     from app.services import history as history_service
 
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    await _owned_session(db, session_id, user)
     return await history_service.list_history(db, session_id)
 
 
@@ -137,8 +147,10 @@ async def invoke_tool_compat(
     session_id: UUID,
     body: ToolInvokeCompatIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> dict[str, Any]:
     """原仓：POST body {tool, params} → {run, session}。"""
+    await _owned_session(db, session_id, user)
     # 图层显隐：本仓无独立工具，直接 PATCH document
     if body.tool == "set_layer_visible":
         layer_id = str(body.params.get("layer_id") or "")
@@ -191,35 +203,35 @@ async def invoke_tool_compat(
 
 
 @router.post("/{session_id}/undo")
-async def undo_session(session_id: UUID, db: DbDep) -> dict[str, Any]:
+async def undo_session(session_id: UUID, db: DbDep, user: CurrentUser) -> dict[str, Any]:
     from app.services import history as history_service
 
+    await _owned_session(db, session_id, user)
     row = await history_service.undo(db, session_id)
     return await build_session_detail(db, row)
 
 
 @router.post("/{session_id}/redo")
-async def redo_session(session_id: UUID, db: DbDep) -> dict[str, Any]:
+async def redo_session(session_id: UUID, db: DbDep, user: CurrentUser) -> dict[str, Any]:
     from app.services import history as history_service
 
+    await _owned_session(db, session_id, user)
     row = await history_service.redo(db, session_id)
     return await build_session_detail(db, row)
 
 
 @router.post("/{session_id}/selection/prepare", status_code=status.HTTP_204_NO_CONTENT)
-async def prepare_selection(session_id: UUID, db: DbDep) -> Response:
+async def prepare_selection(session_id: UUID, db: DbDep, user: CurrentUser) -> Response:
     """点选/SAM 预热：本期空操作。"""
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    await _owned_session(db, session_id, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{session_id}/selection")
-async def select_compat(session_id: UUID, body: SelectCompatIn, db: DbDep) -> dict[str, Any]:
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+async def select_compat(
+    session_id: UUID, body: SelectCompatIn, db: DbDep, user: CurrentUser
+) -> dict[str, Any]:
+    row = await _owned_session(db, session_id, user)
     from app.services.selection_mask import apply_point_selection
 
     try:
@@ -241,10 +253,10 @@ async def select_compat(session_id: UUID, body: SelectCompatIn, db: DbDep) -> di
 
 
 @router.get("/{session_id}/selection")
-async def get_selection(session_id: UUID, db: DbDep) -> dict[str, Any] | None:
-    row = await db.get(EditSession, session_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+async def get_selection(
+    session_id: UUID, db: DbDep, user: CurrentUser
+) -> dict[str, Any] | None:
+    row = await _owned_session(db, session_id, user)
     meta = selection_payload_from_document(row.document)
     if meta is None:
         return None
@@ -270,7 +282,10 @@ async def get_selection(session_id: UUID, db: DbDep) -> dict[str, Any] | None:
 
 
 @router.delete("/{session_id}/selection", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_selection_compat(session_id: UUID, db: DbDep) -> Response:
+async def clear_selection_compat(
+    session_id: UUID, db: DbDep, user: CurrentUser
+) -> Response:
+    await _owned_session(db, session_id, user)
     await sessions_service.update_selection(db, session_id, None)
     row = await db.get(EditSession, session_id)
     if row is not None:
@@ -286,14 +301,14 @@ async def clear_selection_compat(session_id: UUID, db: DbDep) -> Response:
 
 
 @router.post("/{session_id}/exports")
-async def export_compat(session_id: UUID, body: ExportCompatIn, db: DbDep) -> Response:
+async def export_compat(
+    session_id: UUID, body: ExportCompatIn, db: DbDep, user: CurrentUser
+) -> Response:
     """原仓 zip 导出 → 本期返回扁平 PNG。"""
     del body
     from app.services import runs as runs_service
 
-    edit_session = await db.get(EditSession, session_id)
-    if edit_session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    await _owned_session(db, session_id, user)
     data = await runs_service.flatten_visible_layers(db, session_id)
     filename = f"export-{session_id}.png"
     return Response(
@@ -311,8 +326,10 @@ async def patch_selection(
     session_id: UUID,
     body: SelectionPatchIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> SessionOut:
     """同步选区到 document.selection；传 null 表示清除。"""
+    await _owned_session(db, session_id, user)
     payload = None
     if body.selection is not None:
         payload = body.selection.model_dump()
@@ -324,8 +341,10 @@ async def patch_layers(
     session_id: UUID,
     body: LayersPatchIn,
     db: DbDep,
+    user: CurrentUser,
 ) -> SessionOut:
     """更新图层可见性与 active_layer_id。"""
+    await _owned_session(db, session_id, user)
     patches = [item.model_dump(exclude_none=True) for item in body.layers]
     return await sessions_service.update_layers(
         db,

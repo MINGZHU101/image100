@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import BrandMark from '@/components/BrandMark'
+import PointsGuideModal from '@/components/PointsGuideModal'
 import ToastHost from '@/components/ToastHost'
+import UserAvatar from '@/components/UserAvatar'
 import { useAuthActions, useCurrentUser } from '@/hooks/useAuth'
 
 const NAV_ITEMS = [
@@ -24,6 +27,16 @@ export default function WorkbenchLayout() {
   const navigate = useNavigate()
   const { user } = useCurrentUser()
   const { logout } = useAuthActions()
+  const [pointsMessage, setPointsMessage] = useState('')
+
+  useEffect(() => {
+    const onPoints = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      setPointsMessage(detail || '积分不足，请先充值')
+    }
+    window.addEventListener('points-insufficient', onPoints)
+    return () => window.removeEventListener('points-insufficient', onPoints)
+  }, [])
 
   const signOut = () =>
     logout.mutate(undefined, { onSuccess: () => navigate('/', { replace: true }) })
@@ -61,15 +74,29 @@ export default function WorkbenchLayout() {
             ))}
           </ul>
 
-          <div className="border-line mt-2 border-t px-2 pt-3">
+          <div className="border-line mt-2 space-y-1 border-t px-2 pt-3">
+            <NavLink
+              to="/account"
+              title={user ? `${user.display_name || user.username} · 个人中心` : '个人中心'}
+              className={({ isActive }) =>
+                `text-muted hover:bg-soft hover:text-ink flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm transition-colors ${
+                  isActive ? 'bg-brand-soft text-brand-strong' : ''
+                }`
+              }
+            >
+              <UserAvatar user={user} />
+              <span className="truncate opacity-0 transition-opacity group-hover:opacity-100">
+                个人中心
+              </span>
+            </NavLink>
             <button
               type="button"
               onClick={signOut}
-              title={user ? `${user.username} · 退出登录` : '退出登录'}
+              title="退出登录"
               className="text-muted hover:bg-soft hover:text-ink flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm transition-colors"
             >
-              <span className="bg-brand-soft text-brand-strong grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold">
-                {user?.username.slice(0, 1).toUpperCase() ?? '?'}
+              <span className="grid size-5 shrink-0 place-items-center text-xs" aria-hidden>
+                ⎋
               </span>
               <span className="truncate opacity-0 transition-opacity group-hover:opacity-100">
                 退出登录
@@ -83,6 +110,11 @@ export default function WorkbenchLayout() {
         <Outlet />
       </main>
       <ToastHost />
+      <PointsGuideModal
+        open={Boolean(pointsMessage)}
+        message={pointsMessage}
+        onClose={() => setPointsMessage('')}
+      />
     </div>
   )
 }

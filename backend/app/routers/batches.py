@@ -9,12 +9,13 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.deps import DbDep
+from app.compat.session_detail import to_frontend_asset
+from app.deps import CurrentUser, DbDep
 from app.models.asset import Asset
+from app.models.edit_session import EditSession
 from app.models.tool_run import ToolRun
 from app.services import tools as tools_service
 from app.services.assets import to_asset_out
-from app.compat.session_detail import to_frontend_asset
 from app.tools.registry import get_tool
 
 router = APIRouter(prefix="/batches", tags=["batches"])
@@ -43,7 +44,9 @@ class BatchCreateIn(BaseModel):
 
 
 @router.post("")
-async def create_batch(body: BatchCreateIn, db: DbDep) -> dict[str, Any]:
+async def create_batch(
+    body: BatchCreateIn, db: DbDep, user: CurrentUser
+) -> dict[str, Any]:
     """
     简化批量：对每个资产建临时会话并按 operations 顺序入队第一个工具，
     返回首个 run 作为批量进度入口（演示级，非原仓完整编排）。
@@ -62,9 +65,9 @@ async def create_batch(body: BatchCreateIn, db: DbDep) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     for asset_id in body.asset_ids:
         asset = await db.get(Asset, asset_id)
-        if asset is None:
+        if asset is None or asset.owner_id != user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="资产不存在")
-        session_out = await sessions_service.create_session(db, asset_id)
+        session_out = await sessions_service.create_session(db, user, asset_id)
         # 只跑流水线第一个操作，后续版本再串完整链
         op = body.operations[0]
         invoked = await tools_service.invoke_tool(
@@ -89,10 +92,14 @@ async def create_batch(body: BatchCreateIn, db: DbDep) -> dict[str, Any]:
 
 
 @router.get("")
-async def list_batches(db: DbDep) -> list[dict[str, Any]]:
+async def list_batches(db: DbDep, user: CurrentUser) -> list[dict[str, Any]]:
     """近期工具运行列表，凑合给批量历史页。"""
     result = await db.execute(
-        select(ToolRun).order_by(ToolRun.created_at.desc()).limit(20)
+        select(ToolRun)
+        .join(EditSession, ToolRun.session_id == EditSession.id)
+        .where(EditSession.owner_id == user.id)
+        .order_by(ToolRun.created_at.desc())
+        .limit(20)
     )
     items = []
     for run in result.scalars().all():

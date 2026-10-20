@@ -19,6 +19,9 @@ dependencies = [
     "langchain-core",
     "langchain-openai",
     "cos-python-sdk-v5",
+    "bcrypt",
+    "PyJWT",
+    "langsmith",
 ]
 
 [build-system]
