@@ -66,6 +66,42 @@ async def checkin(user: CurrentUser, db: DbDep) -> dict:
     return await account_service.checkin(db, user)
 
 
+@router.post("/newbie-gift")
+async def claim_newbie_gift(user: CurrentUser, db: DbDep) -> dict:
+    return await account_service.claim_newbie_gift(db, user)
+
+
+@router.get("/announcements")
+async def list_announcements(user: CurrentUser, db: DbDep) -> list[dict]:
+    from app.services import admin_ops as admin_ops_service
+
+    rows = await admin_ops_service.list_announcements(db, published_only=True)
+    return [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "body": r.body or "",
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/announcements/latest")
+async def latest_announcement(user: CurrentUser, db: DbDep) -> dict | None:
+    from app.services import admin_ops as admin_ops_service
+
+    row = await admin_ops_service.latest_announcement(db)
+    if row is None:
+        return None
+    return {
+        "id": str(row.id),
+        "title": row.title,
+        "body": row.body or "",
+        "created_at": row.created_at.isoformat(),
+    }
+
+
 @router.post("/mock-recharge")
 async def mock_recharge(body: MockRechargeIn, user: CurrentUser, db: DbDep) -> dict:
     return await account_service.mock_recharge(db, user, body.yuan)

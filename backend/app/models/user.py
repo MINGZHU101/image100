@@ -25,3 +25,7 @@ class User(UUIDBase):
     avatar_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 是否已成功领取过邀请奖励（一生一次）
     invite_reward_claimed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 新手礼包是否已领（替代注册自动到账）
+    newbie_gift_claimed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_frozen: Mapped[bool] = mapped_column(Boolean, default=False)
+    token_version: Mapped[int] = mapped_column(Integer, default=0)

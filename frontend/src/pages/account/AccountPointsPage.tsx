@@ -7,6 +7,9 @@ import { errorMessage, useAuthActions, useCurrentUser } from '@/hooks/useAuth'
 
 const POINT_KIND_LABEL: Record<string, string> = {
   register_bonus: '注册赠送',
+  newbie_gift: '新手礼包',
+  admin_adjust: '管理员调整',
+  admin_batch: '活动发放',
   checkin: '每日签到',
   invite_reward: '邀请奖励',
   exchange_from_wallet: '余额兑换',

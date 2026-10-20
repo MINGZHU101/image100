@@ -9,13 +9,9 @@ from fastapi import HTTPException, UploadFile, status
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.membership_rules import (
-    AVATAR_MAX_BYTES,
-    CHECKIN_POINTS,
-    MOCK_RECHARGE_MAX_YUAN,
-    MOCK_RECHARGE_POINTS_PER_YUAN,
-)
+from app.membership_rules import AVATAR_MAX_BYTES, DEMO_ACCOUNT
 from app.models import User
+from app.services import app_settings as settings_service
 from app.services.points import credit
 from app.services.quota import shanghai_today_date
 from app.services import wallet as wallet_service
@@ -32,7 +28,8 @@ async def checkin(session: AsyncSession, user: User) -> dict:
     today = shanghai_today_date()
     if user.last_checkin_date == today:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "今日已签到")
-    amount = CHECKIN_POINTS.get(user.member_tier, 20)
+    table = await settings_service.checkin_points_table(session)
+    amount = int(table.get(user.member_tier, 20))
     await credit(
         session,
         user,
@@ -46,12 +43,37 @@ async def checkin(session: AsyncSession, user: User) -> dict:
     return {"points_gained": amount, "points_balance": user.points_balance, "checkin_date": today.isoformat()}
 
 
+async def claim_newbie_gift(session: AsyncSession, user: User) -> dict:
+    """一次性领取新手礼包积分。demo 与已领用户拒绝。"""
+    if user.username == DEMO_ACCOUNT:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "演示账号不参与新手礼包")
+    if bool(getattr(user, "newbie_gift_claimed", False)):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "礼包已领取")
+    amount = await settings_service.newbie_gift_points(session)
+    await credit(
+        session,
+        user,
+        amount=amount,
+        kind="newbie_gift",
+        remark="新手礼包",
+    )
+    user.newbie_gift_claimed = True
+    await session.commit()
+    await session.refresh(user)
+    return {
+        "points_gained": amount,
+        "points_balance": user.points_balance,
+        "newbie_gift_claimed": True,
+    }
+
+
 async def mock_recharge(session: AsyncSession, user: User, yuan: int) -> dict:
     """模拟充值：金额进入账户余额（不直接加积分）。"""
-    if yuan < 1 or yuan > MOCK_RECHARGE_MAX_YUAN:
+    max_yuan = await settings_service.mock_recharge_max_yuan(session)
+    if yuan < 1 or yuan > max_yuan:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"单次充值金额须为 1～{MOCK_RECHARGE_MAX_YUAN} 元",
+            f"单次充值金额须为 1～{max_yuan} 元",
         )
     await wallet_service.credit_wallet(
         session,
@@ -70,7 +92,7 @@ async def mock_recharge(session: AsyncSession, user: User, yuan: int) -> dict:
 
 
 async def exchange_points(session: AsyncSession, user: User, yuan: int) -> dict:
-    """余额兑换积分：1 元 = MOCK_RECHARGE_POINTS_PER_YUAN 积分。"""
+    """余额兑换积分：汇率取运营配置。"""
     if yuan < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "兑换金额至少 1 元")
     if yuan > int(user.wallet_balance or 0):
@@ -78,7 +100,8 @@ async def exchange_points(session: AsyncSession, user: User, yuan: int) -> dict:
             status.HTTP_400_BAD_REQUEST,
             f"余额不足：当前 ¥{user.wallet_balance}",
         )
-    points = yuan * MOCK_RECHARGE_POINTS_PER_YUAN
+    rate = await settings_service.points_per_yuan(session)
+    points = yuan * rate
     await wallet_service.debit_wallet(
         session,
         user,

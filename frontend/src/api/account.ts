@@ -54,6 +54,18 @@ export const accountApi = {
   activeInvite: () => api.get<InviteCode | null>('/account/invite-codes/active'),
   redeemInvite: (invite_code: string) =>
     api.post<User>('/account/invite-codes/redeem', { invite_code }),
+  claimNewbieGift: () =>
+    api.post<{ points_gained: number; points_balance: number; newbie_gift_claimed: boolean }>(
+      '/account/newbie-gift',
+    ),
+  announcements: () =>
+    api.get<{ id: string; title: string; body: string; created_at: string }[]>(
+      '/account/announcements',
+    ),
+  latestAnnouncement: () =>
+    api.get<{ id: string; title: string; body: string; created_at: string } | null>(
+      '/account/announcements/latest',
+    ),
   uploadAvatar: async (file: File) => {
     const form = new FormData()
     form.append('file', file)

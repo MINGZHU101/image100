@@ -8,10 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.membership_rules import DEMO_ACCOUNT, REGISTER_BONUS
+from app.membership_rules import DEMO_ACCOUNT
 from app.models import User
 from app.security import hash_password, verify_password
-from app.services import points as points_service
 
 
 class AccountTaken(Exception):
@@ -26,6 +25,10 @@ class PasswordMismatch(Exception):
     pass
 
 
+class AccountFrozen(Exception):
+    pass
+
+
 async def register(
     session: AsyncSession,
     *,
@@ -36,6 +39,7 @@ async def register(
 ) -> User:
     if password != password_confirm:
         raise PasswordMismatch
+    # v11：注册不再自动赠分，由新手礼包主动领取
     user = User(
         username=account.strip(),
         display_name=display_name.strip() or account.strip(),
@@ -44,6 +48,9 @@ async def register(
         points_balance=0,
         points_spent_total=0,
         invite_reward_claimed=False,
+        newbie_gift_claimed=False,
+        is_frozen=False,
+        token_version=0,
     )
     session.add(user)
     try:
@@ -52,13 +59,6 @@ async def register(
         await session.rollback()
         raise AccountTaken from exc
 
-    await points_service.credit(
-        session,
-        user,
-        amount=REGISTER_BONUS,
-        kind="register_bonus",
-        remark="注册赠送",
-    )
     await session.commit()
     await session.refresh(user)
     return user
@@ -68,6 +68,8 @@ async def authenticate(session: AsyncSession, account: str, password: str) -> Us
     user = await session.scalar(select(User).where(User.username == account.strip()))
     if user is None or not verify_password(password, user.password_hash):
         raise InvalidCredentials
+    if bool(getattr(user, "is_frozen", False)):
+        raise AccountFrozen
     return user
 
 

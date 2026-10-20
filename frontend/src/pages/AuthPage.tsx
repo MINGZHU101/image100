@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { authApi } from '@/api/auth'
 import BrandMark from '@/components/BrandMark'
 import { errorMessage, useAuthActions, useCurrentUser } from '@/hooks/useAuth'
 
 type Mode = 'login' | 'register'
+type Audience = 'user' | 'admin'
 type Rules = { minLength?: number; maxLength?: number; pattern?: string; title?: string }
 
 const COPY: Record<Mode, { title: string; submit: string; switchTo: Mode; switchHint: string }> = {
@@ -27,10 +30,13 @@ const PASSWORD_RULES: Rules = { minLength: 6, maxLength: 64, title: '6–64 位'
 
 export default function AuthPage() {
   const [params, setParams] = useSearchParams()
-  const mode: Mode = params.get('mode') === 'register' ? 'register' : 'login'
+  const audience: Audience = params.get('as') === 'admin' ? 'admin' : 'user'
+  const mode: Mode =
+    audience === 'admin' ? 'login' : params.get('mode') === 'register' ? 'register' : 'login'
   const copy = COPY[mode]
 
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user, isLoading } = useCurrentUser()
   const { login, register } = useAuthActions()
   const action = mode === 'login' ? login : register
@@ -42,11 +48,23 @@ export default function AuthPage() {
   const [inviteCode, setInviteCode] = useState('')
   const [localError, setLocalError] = useState('')
 
-  if (!isLoading && user) return <Navigate to="/create" replace />
+  const adminLogin = useMutation({
+    mutationFn: () => authApi.adminLogin({ username: account, password }),
+    onSuccess: (admin) => {
+      queryClient.setQueryData(['auth', 'admin', 'me'], admin)
+      navigate('/admin', { replace: true })
+    },
+  })
+
+  if (!isLoading && user && audience === 'user') return <Navigate to="/create" replace />
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     setLocalError('')
+    if (audience === 'admin') {
+      adminLogin.mutate()
+      return
+    }
     if (mode === 'register') {
       if (password !== passwordConfirm) {
         setLocalError('两次输入的密码不一致')
@@ -80,6 +98,27 @@ export default function AuthPage() {
     setParams({ mode: copy.switchTo })
   }
 
+  const switchAudience = (next: Audience) => {
+    action.reset()
+    adminLogin.reset()
+    setLocalError('')
+    setAccount('')
+    setPassword('')
+    if (next === 'admin') setParams({ as: 'admin' })
+    else setParams({ mode: 'login' })
+  }
+
+  const pending = audience === 'admin' ? adminLogin.isPending : action.isPending
+  const err =
+    localError ||
+    (audience === 'admin'
+      ? adminLogin.isError
+        ? errorMessage(adminLogin.error)
+        : ''
+      : action.isError
+        ? errorMessage(action.error)
+        : '')
+
   return (
     <div className="relative isolate flex min-h-screen items-center justify-center px-6 py-12">
       <div className="bg-glow absolute inset-x-0 top-0 h-[420px]" aria-hidden />
@@ -91,10 +130,35 @@ export default function AuthPage() {
 
         <div className="border-line bg-paper rounded-panel shadow-panel border p-8">
           <BrandMark size="sm">
-            <span className="text-ink text-sm font-semibold">电商商品视觉工作台</span>
+            <span className="text-ink text-sm font-semibold">
+              {audience === 'admin' ? '电商商品视觉管理台' : '电商商品视觉工作台'}
+            </span>
           </BrandMark>
 
-          <h1 className="text-ink mt-6 text-2xl font-semibold tracking-tight">{copy.title}</h1>
+          <div className="border-line mt-5 flex gap-1 rounded-control border p-1 text-sm">
+            <button
+              type="button"
+              onClick={() => switchAudience('user')}
+              className={`flex-1 rounded-[10px] py-1.5 ${
+                audience === 'user' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
+              }`}
+            >
+              用户登录
+            </button>
+            <button
+              type="button"
+              onClick={() => switchAudience('admin')}
+              className={`flex-1 rounded-[10px] py-1.5 ${
+                audience === 'admin' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
+              }`}
+            >
+              管理员登录
+            </button>
+          </div>
+
+          <h1 className="text-ink mt-6 text-2xl font-semibold tracking-tight">
+            {audience === 'admin' ? '管理员登录' : copy.title}
+          </h1>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <Field
@@ -102,10 +166,10 @@ export default function AuthPage() {
               value={account}
               onChange={setAccount}
               autoComplete="username"
-              placeholder="登录用，字母数字下划线"
+              placeholder={audience === 'admin' ? '管理员账号' : '登录用，字母数字下划线'}
               rules={mode === 'register' ? ACCOUNT_RULES : undefined}
             />
-            {mode === 'register' && (
+            {audience === 'user' && mode === 'register' && (
               <Field
                 label="用户名"
                 value={displayName}
@@ -124,7 +188,7 @@ export default function AuthPage() {
               placeholder="至少 6 位"
               rules={mode === 'register' ? PASSWORD_RULES : undefined}
             />
-            {mode === 'register' && (
+            {audience === 'user' && mode === 'register' && (
               <Field
                 label="确认密码"
                 type="password"
@@ -135,29 +199,29 @@ export default function AuthPage() {
                 rules={PASSWORD_RULES}
               />
             )}
-            <Field
-              label="邀请码（可选）"
-              value={inviteCode}
-              onChange={setInviteCode}
-              autoComplete="off"
-              placeholder="五位字母数字"
-              required={false}
-            />
-
-            {(localError || action.isError) && (
-              <p className="text-danger text-sm">{localError || errorMessage(action.error)}</p>
+            {audience === 'user' && (
+              <Field
+                label="邀请码（可选）"
+                value={inviteCode}
+                onChange={setInviteCode}
+                autoComplete="off"
+                placeholder="五位字母数字"
+                required={false}
+              />
             )}
+
+            {err && <p className="text-danger text-sm">{err}</p>}
 
             <button
               type="submit"
-              disabled={action.isPending}
+              disabled={pending}
               className="bg-ink hover:bg-dark rounded-control w-full py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
             >
-              {action.isPending ? '处理中…' : copy.submit}
+              {pending ? '处理中…' : audience === 'admin' ? '进入管理台' : copy.submit}
             </button>
           </form>
 
-          {mode === 'login' && (
+          {audience === 'user' && mode === 'login' && (
             <button
               type="button"
               disabled={login.isPending}
@@ -173,13 +237,15 @@ export default function AuthPage() {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={switchMode}
-            className="text-muted hover:text-brand-strong mt-5 text-sm transition-colors"
-          >
-            {copy.switchHint}
-          </button>
+          {audience === 'user' && (
+            <button
+              type="button"
+              onClick={switchMode}
+              className="text-muted hover:text-brand-strong mt-5 text-sm transition-colors"
+            >
+              {copy.switchHint}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
+import { accountApi } from '@/api/account'
 import BrandMark from '@/components/BrandMark'
 import PointsGuideModal from '@/components/PointsGuideModal'
 import ToastHost from '@/components/ToastHost'
@@ -28,6 +30,11 @@ export default function WorkbenchLayout() {
   const { user } = useCurrentUser()
   const { logout } = useAuthActions()
   const [pointsMessage, setPointsMessage] = useState('')
+  const { data: latestAnnouncement } = useQuery({
+    queryKey: ['account', 'announcement', 'latest'],
+    queryFn: () => accountApi.latestAnnouncement(),
+    staleTime: 60_000,
+  })
 
   useEffect(() => {
     const onPoints = (event: Event) => {
@@ -107,6 +114,16 @@ export default function WorkbenchLayout() {
       </nav>
 
       <main className="min-w-0 flex-1 overflow-auto">
+        {latestAnnouncement && (
+          <div className="border-line bg-brand-soft/40 text-ink border-b px-4 py-2 text-sm">
+            <span className="font-medium">公告</span>
+            <span className="text-muted mx-2">·</span>
+            {latestAnnouncement.title}
+            {latestAnnouncement.body ? (
+              <span className="text-muted"> — {latestAnnouncement.body}</span>
+            ) : null}
+          </div>
+        )}
         <Outlet />
       </main>
       <ToastHost />

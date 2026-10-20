@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import AccountLayout from '@/layouts/AccountLayout'
+import AdminLayout from '@/layouts/AdminLayout'
+import RequireAdmin from '@/layouts/RequireAdmin'
 import RequireAuth from '@/layouts/RequireAuth'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout'
 import AccountInvitePage from '@/pages/account/AccountInvitePage'
@@ -8,6 +10,16 @@ import AccountOverviewPage from '@/pages/account/AccountOverviewPage'
 import AccountPointsPage from '@/pages/account/AccountPointsPage'
 import AccountProfilePage from '@/pages/account/AccountProfilePage'
 import AccountSecurityPage from '@/pages/account/AccountSecurityPage'
+import AdminAdminsPage from '@/pages/admin/AdminAdminsPage'
+import AdminAnnouncementsPage from '@/pages/admin/AdminAnnouncementsPage'
+import AdminAuditPage from '@/pages/admin/AdminAuditPage'
+import AdminBatchPage from '@/pages/admin/AdminBatchPage'
+import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
+import AdminInvitesPage from '@/pages/admin/AdminInvitesPage'
+import AdminPointsPage from '@/pages/admin/AdminPointsPage'
+import AdminSessionsPage from '@/pages/admin/AdminSessionsPage'
+import AdminSettingsPage from '@/pages/admin/AdminSettingsPage'
+import AdminUsersPage from '@/pages/admin/AdminUsersPage'
 import AuthPage from '@/pages/AuthPage'
 import BatchPage from '@/pages/BatchPage'
 import CandidatesPage from '@/pages/CandidatesPage'
@@ -22,6 +34,21 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="points" element={<AdminPointsPage />} />
+            <Route path="invites" element={<AdminInvitesPage />} />
+            <Route path="sessions" element={<AdminSessionsPage />} />
+            <Route path="announcements" element={<AdminAnnouncementsPage />} />
+            <Route path="settings" element={<AdminSettingsPage />} />
+            <Route path="batch" element={<AdminBatchPage />} />
+            <Route path="admins" element={<AdminAdminsPage />} />
+            <Route path="audit" element={<AdminAuditPage />} />
+          </Route>
+        </Route>
 
         <Route element={<RequireAuth />}>
           <Route element={<WorkbenchLayout />}>

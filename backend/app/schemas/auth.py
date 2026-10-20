@@ -77,6 +77,9 @@ class UserOut(BaseModel):
     points_balance: int
     points_spent_total: int
     invite_reward_claimed: bool
+    newbie_gift_claimed: bool = False
+    newbie_gift_eligible: bool = False
+    is_frozen: bool = False
     last_checkin_date: str | None
     avatar_url: str | None
     next_tier: str | None
@@ -85,10 +88,14 @@ class UserOut(BaseModel):
 
     @classmethod
     def from_user(cls, user: User) -> UserOut:
+        from app.membership_rules import DEMO_ACCOUNT
+
         next_tier, need = next_tier_progress(int(user.points_spent_total or 0))
         avatar_url = None
         if user.avatar_key:
             avatar_url = f"/api/account/avatar/{user.id}"
+        claimed = bool(getattr(user, "newbie_gift_claimed", False))
+        is_demo = user.username == DEMO_ACCOUNT
         return cls(
             id=str(user.id),
             account=user.username,
@@ -99,6 +106,9 @@ class UserOut(BaseModel):
             points_balance=int(user.points_balance or 0),
             points_spent_total=int(user.points_spent_total or 0),
             invite_reward_claimed=bool(user.invite_reward_claimed),
+            newbie_gift_claimed=claimed,
+            newbie_gift_eligible=(not claimed and not is_demo),
+            is_frozen=bool(getattr(user, "is_frozen", False)),
             last_checkin_date=user.last_checkin_date.isoformat() if user.last_checkin_date else None,
             avatar_url=avatar_url,
             next_tier=next_tier,

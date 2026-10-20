@@ -1,18 +1,43 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { accountApi } from '@/api/account'
-import { useCurrentUser } from '@/hooks/useAuth'
+import NewbieGiftModal from '@/components/NewbieGiftModal'
 import UserAvatar from '@/components/UserAvatar'
+import { errorMessage, useAuthActions, useCurrentUser } from '@/hooks/useAuth'
+import { toast } from '@/stores/toasts'
 
 export default function AccountOverviewPage() {
   const { user } = useCurrentUser()
+  const { cacheUser } = useAuthActions()
+  const queryClient = useQueryClient()
+  const [giftOpen, setGiftOpen] = useState(false)
+
   const { data } = useQuery({
     queryKey: ['account', 'me'],
     queryFn: () => accountApi.me(),
   })
+  const { data: announcements } = useQuery({
+    queryKey: ['account', 'announcements'],
+    queryFn: () => accountApi.announcements(),
+  })
+
   const profile = data?.user ?? user
   const usage = data?.usage
+  const eligible = Boolean(profile?.newbie_gift_eligible)
+  const claimed = Boolean(profile?.newbie_gift_claimed)
+
+  const claim = useMutation({
+    mutationFn: () => accountApi.claimNewbieGift(),
+    onSuccess: async (result) => {
+      toast(`已领取 ${result.points_gained} 积分`)
+      const me = await accountApi.me()
+      cacheUser(me.user)
+      queryClient.setQueryData(['account', 'me'], me)
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+    },
+  })
 
   if (!profile) return null
 
@@ -29,6 +54,20 @@ export default function AccountOverviewPage() {
             {' · '}积分 {profile.points_balance}
           </p>
         </div>
+        {(eligible || claimed) && (
+          <button
+            type="button"
+            onClick={() => setGiftOpen(true)}
+            className="shrink-0 transition-transform hover:scale-105 active:scale-95"
+            title={claimed ? '礼包已领取' : '领取新手礼包'}
+          >
+            <img
+              src="/newbie-gift.png"
+              alt="新手礼包"
+              className={`h-14 w-14 object-contain ${claimed ? 'opacity-45 grayscale' : ''}`}
+            />
+          </button>
+        )}
         <Link to="/account/profile" className="text-brand-strong text-sm hover:underline">
           编辑资料
         </Link>
@@ -58,6 +97,20 @@ export default function AccountOverviewPage() {
         </p>
       )}
 
+      {announcements && announcements.length > 0 && (
+        <div className="border-line rounded-card border bg-soft/40 px-4 py-3">
+          <p className="text-ink text-sm font-medium">公告</p>
+          <ul className="mt-2 space-y-2">
+            {announcements.slice(0, 5).map((item) => (
+              <li key={item.id} className="text-muted text-sm">
+                <span className="text-ink font-medium">{item.title}</span>
+                {item.body ? ` — ${item.body}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Link
           to="/account/points"
@@ -72,6 +125,18 @@ export default function AccountOverviewPage() {
           邀请好友
         </Link>
       </div>
+
+      <NewbieGiftModal
+        open={giftOpen}
+        claimed={claimed}
+        busy={claim.isPending}
+        error={claim.isError ? errorMessage(claim.error) : undefined}
+        onClose={() => {
+          setGiftOpen(false)
+          claim.reset()
+        }}
+        onClaim={() => claim.mutate()}
+      />
     </div>
   )
 }
