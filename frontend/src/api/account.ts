@@ -28,12 +28,21 @@ export const accountApi = {
   me: () => api.get<{ user: User; usage: Usage }>('/account/me'),
   usage: () => api.get<Usage>('/account/usage'),
   ledger: (limit = 50) => api.get<LedgerItem[]>(`/account/ledger?limit=${limit}`),
+  walletLedger: (limit = 50) =>
+    api.get<LedgerItem[]>(`/account/wallet-ledger?limit=${limit}`),
   checkin: () => api.post<{ points_gained: number; points_balance: number }>('/account/checkin'),
   mockRecharge: (yuan: number) =>
-    api.post<{ yuan: number; points_gained: number; points_balance: number }>(
+    api.post<{ yuan: number; wallet_balance: number; points_balance: number }>(
       '/account/mock-recharge',
       { yuan },
     ),
+  exchangePoints: (yuan: number) =>
+    api.post<{
+      yuan: number
+      points_gained: number
+      wallet_balance: number
+      points_balance: number
+    }>('/account/exchange-points', { yuan }),
   updateDisplayName: (display_name: string) =>
     api.patch<User>('/account/display-name', { display_name }),
   changePassword: (body: {

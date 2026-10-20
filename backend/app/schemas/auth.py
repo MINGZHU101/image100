@@ -56,6 +56,12 @@ class MockRechargeIn(BaseModel):
     yuan: int = Field(..., ge=1, le=1000)
 
 
+class ExchangePointsIn(BaseModel):
+    """用余额兑换积分：单位为元。"""
+
+    yuan: int = Field(..., ge=1, le=1000)
+
+
 class InviteRedeemIn(BaseModel):
     invite_code: str = Field(..., min_length=5, max_length=16)
 
@@ -67,6 +73,7 @@ class UserOut(BaseModel):
     # 兼容旧前端字段：等同 display_name
     username: str
     member_tier: str
+    wallet_balance: int
     points_balance: int
     points_spent_total: int
     invite_reward_claimed: bool
@@ -88,6 +95,7 @@ class UserOut(BaseModel):
             display_name=user.display_name or user.username,
             username=user.display_name or user.username,
             member_tier=user.member_tier or "青铜",
+            wallet_balance=int(getattr(user, "wallet_balance", 0) or 0),
             points_balance=int(user.points_balance or 0),
             points_spent_total=int(user.points_spent_total or 0),
             invite_reward_claimed=bool(user.invite_reward_claimed),

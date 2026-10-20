@@ -17,6 +17,8 @@ class User(UUIDBase):
     password_hash: Mapped[str] = mapped_column(String(255))
 
     member_tier: Mapped[str] = mapped_column(String(16), default="青铜")
+    # 账户余额（元，模拟充值优先入账，可再兑换积分）
+    wallet_balance: Mapped[int] = mapped_column(Integer, default=0)
     points_balance: Mapped[int] = mapped_column(Integer, default=0)
     points_spent_total: Mapped[int] = mapped_column(Integer, default=0)
     last_checkin_date: Mapped[date | None] = mapped_column(Date, nullable=True)

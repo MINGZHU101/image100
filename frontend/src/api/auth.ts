@@ -6,6 +6,7 @@ export type User = {
   display_name: string
   username: string
   member_tier: string
+  wallet_balance: number
   points_balance: number
   points_spent_total: number
   invite_reward_claimed: boolean

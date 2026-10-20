@@ -9,6 +9,7 @@ from app.deps import CurrentUser, DbDep
 from app.schemas.auth import (
     ChangePasswordIn,
     DisplayNameIn,
+    ExchangePointsIn,
     InviteRedeemIn,
     LedgerOut,
     MockRechargeIn,
@@ -20,6 +21,7 @@ from app.services import auth as auth_service
 from app.services import invite as invite_service
 from app.services import points as points_service
 from app.services import quota as quota_service
+from app.services import wallet as wallet_service
 from app.storage import get_storage
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -69,9 +71,30 @@ async def mock_recharge(body: MockRechargeIn, user: CurrentUser, db: DbDep) -> d
     return await account_service.mock_recharge(db, user, body.yuan)
 
 
+@router.post("/exchange-points")
+async def exchange_points(body: ExchangePointsIn, user: CurrentUser, db: DbDep) -> dict:
+    return await account_service.exchange_points(db, user, body.yuan)
+
+
 @router.get("/ledger")
 async def ledger(user: CurrentUser, db: DbDep, limit: int = 50) -> list[LedgerOut]:
     rows = await points_service.list_ledger(db, user.id, limit=min(limit, 100))
+    return [
+        LedgerOut(
+            id=str(row.id),
+            delta=row.delta,
+            balance_after=row.balance_after,
+            kind=row.kind,
+            remark=row.remark or "",
+            created_at=row.created_at.isoformat(),
+        )
+        for row in rows
+    ]
+
+
+@router.get("/wallet-ledger")
+async def wallet_ledger(user: CurrentUser, db: DbDep, limit: int = 50) -> list[LedgerOut]:
+    rows = await wallet_service.list_ledger(db, user.id, limit=min(limit, 100))
     return [
         LedgerOut(
             id=str(row.id),

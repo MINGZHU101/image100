@@ -25,6 +25,7 @@ export default function AccountOverviewPage() {
           <p className="text-muted mt-1 text-sm">账号 {profile.account}</p>
           <p className="text-muted mt-1 text-sm">
             会员 <span className="text-brand-strong font-medium">{profile.member_tier}</span>
+            {' · '}余额 ¥{profile.wallet_balance ?? 0}
             {' · '}积分 {profile.points_balance}
           </p>
         </div>
@@ -33,8 +34,9 @@ export default function AccountOverviewPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="当前积分" value={String(profile.points_balance)} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="账户余额" value={`¥${profile.wallet_balance ?? 0}`} />
+        <Stat label="积分余额" value={String(profile.points_balance)} />
         <Stat label="会员等级" value={profile.member_tier} />
         <Stat
           label="今日 AI"

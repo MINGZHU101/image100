@@ -16,7 +16,9 @@ export default function PointsGuideModal({
       <div className="border-line bg-paper rounded-panel shadow-panel w-full max-w-sm border p-6">
         <h2 className="text-ink text-lg font-semibold">积分不足</h2>
         <p className="text-muted mt-2 text-sm leading-relaxed">{message}</p>
-        <p className="text-muted mt-2 text-sm">可前往个人中心使用「模拟充值」（测试用，非真实支付）。</p>
+        <p className="text-muted mt-2 text-sm">
+          可前往个人中心充值余额，再兑换为积分（测试用，非真实支付）。
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
@@ -30,7 +32,7 @@ export default function PointsGuideModal({
             onClick={onClose}
             className="bg-ink hover:bg-dark rounded-control px-3.5 py-2 text-sm font-medium text-white"
           >
-            去充值
+            去充值 / 兑换
           </Link>
         </div>
       </div>
