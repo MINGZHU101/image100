@@ -8,6 +8,7 @@ const NAV = [
   { to: '/admin', label: '仪表盘', end: true },
   { to: '/admin/users', label: '用户管理' },
   { to: '/admin/points', label: '积分流水' },
+  { to: '/admin/lucky-wheel', label: '幸运大转盘' },
   { to: '/admin/invites', label: '邀请概览' },
   { to: '/admin/sessions', label: '会话概览' },
   { to: '/admin/announcements', label: '公告管理' },

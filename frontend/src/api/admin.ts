@@ -134,4 +134,67 @@ export const adminApi = {
     new_password: string
     new_password_confirm: string
   }) => api.post<void>('/admin/admins/me/password', body),
+  luckyWheelSpins: (params: {
+    q?: string
+    period_ym?: string
+    jackpot_only?: boolean
+    page?: number
+  }) => {
+    const qs = new URLSearchParams()
+    if (params.q) qs.set('q', params.q)
+    if (params.period_ym) qs.set('period_ym', params.period_ym)
+    if (params.jackpot_only) qs.set('jackpot_only', 'true')
+    qs.set('page', String(params.page ?? 1))
+    return api.get<
+      PageResult<{
+        id: string
+        account: string
+        display_name: string
+        period_ym: string
+        spin_index: number
+        cost_yuan: number
+        slot_index: number
+        prize_kind: string
+        prize_label: string
+        points_awarded: number
+        is_jackpot: boolean
+        remark: string
+        created_at: string
+      }>
+    >(`/admin/lucky-wheel/spins?${qs}`)
+  },
+  luckyWheelConfig: () =>
+    api.get<{
+      period_ym: string
+      current: {
+        costs: number[]
+        slots: Array<{
+          index: number
+          kind: string
+          label: string
+          points: number
+          weight: number
+          jackpot?: boolean
+        }>
+        jackpot_prob_each: number
+      }
+      next: {
+        costs: number[]
+        slots: Array<{
+          index: number
+          kind: string
+          label: string
+          points: number
+          weight: number
+          jackpot?: boolean
+        }>
+        jackpot_prob_each: number
+      }
+      note: string
+    }>('/admin/lucky-wheel/config'),
+  saveLuckyWheelNext: (body: {
+    costs: number[]
+    slots: Array<Record<string, unknown>>
+    jackpot_prob_each?: number
+  }) => api.put<{ period_ym: string; next: unknown; message: string }>('/admin/lucky-wheel/config/next', body),
 }

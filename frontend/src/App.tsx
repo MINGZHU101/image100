@@ -6,6 +6,7 @@ import RequireAdmin from '@/layouts/RequireAdmin'
 import RequireAuth from '@/layouts/RequireAuth'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout'
 import AccountInvitePage from '@/pages/account/AccountInvitePage'
+import AccountLuckyWheelPage from '@/pages/account/AccountLuckyWheelPage'
 import AccountOverviewPage from '@/pages/account/AccountOverviewPage'
 import AccountPointsPage from '@/pages/account/AccountPointsPage'
 import AccountProfilePage from '@/pages/account/AccountProfilePage'
@@ -16,6 +17,7 @@ import AdminAuditPage from '@/pages/admin/AdminAuditPage'
 import AdminBatchPage from '@/pages/admin/AdminBatchPage'
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage'
 import AdminInvitesPage from '@/pages/admin/AdminInvitesPage'
+import AdminLuckyWheelPage from '@/pages/admin/AdminLuckyWheelPage'
 import AdminPointsPage from '@/pages/admin/AdminPointsPage'
 import AdminSessionsPage from '@/pages/admin/AdminSessionsPage'
 import AdminSettingsPage from '@/pages/admin/AdminSettingsPage'
@@ -41,6 +43,7 @@ export default function App() {
             <Route index element={<AdminDashboardPage />} />
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="points" element={<AdminPointsPage />} />
+            <Route path="lucky-wheel" element={<AdminLuckyWheelPage />} />
             <Route path="invites" element={<AdminInvitesPage />} />
             <Route path="sessions" element={<AdminSessionsPage />} />
             <Route path="announcements" element={<AdminAnnouncementsPage />} />
@@ -66,6 +69,7 @@ export default function App() {
               <Route index element={<AccountOverviewPage />} />
               <Route path="profile" element={<AccountProfilePage />} />
               <Route path="points" element={<AccountPointsPage />} />
+              <Route path="lucky-wheel" element={<AccountLuckyWheelPage />} />
               <Route path="invite" element={<AccountInvitePage />} />
               <Route path="security" element={<AccountSecurityPage />} />
             </Route>

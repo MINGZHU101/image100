@@ -15,6 +15,7 @@ from app.routers import (
     export,
     generations,
     health,
+    lucky_wheel,
     sessions,
     tools,
 )
@@ -35,3 +36,4 @@ api_router.include_router(generations.router)
 api_router.include_router(batches.router)
 api_router.include_router(copywriting.router)
 api_router.include_router(assistant.router)
+api_router.include_router(lucky_wheel.router)

@@ -16,12 +16,14 @@ const POINT_KIND_LABEL: Record<string, string> = {
   consume_agent: 'Agent 消耗',
   consume_generation: '文生图消耗',
   consume_copywriting: '文案生成',
+  lucky_wheel: '幸运大转盘',
   mock_recharge: '模拟充值（旧）',
 }
 
 const WALLET_KIND_LABEL: Record<string, string> = {
   mock_recharge: '模拟充值',
   exchange_points: '兑换积分',
+  lucky_wheel: '幸运大转盘',
 }
 
 export default function AccountPointsPage() {

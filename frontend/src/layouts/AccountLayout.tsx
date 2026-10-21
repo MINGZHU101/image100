@@ -4,6 +4,7 @@ const NAV = [
   { to: '/account', end: true, label: '总览' },
   { to: '/account/profile', end: false, label: '基本信息' },
   { to: '/account/points', end: false, label: '积分与会员' },
+  { to: '/account/lucky-wheel', end: false, label: '幸运大转盘' },
   { to: '/account/invite', end: false, label: '邀请码' },
   { to: '/account/security', end: false, label: '安全设置' },
 ]
