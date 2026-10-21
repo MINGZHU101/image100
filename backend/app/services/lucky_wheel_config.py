@@ -155,17 +155,25 @@ async def ensure_period_pool(
     return current, True
 
 
-async def get_current_pool(session: AsyncSession, period_ym: str) -> dict[str, Any]:
+async def get_current_pool(
+    session: AsyncSession,
+    period_ym: str,
+    *,
+    commit_if_rolled: bool = True,
+) -> dict[str, Any]:
+    """
+    读取本月奖池。
+    commit_if_rolled=False 用于抽奖事务内：只 flush，避免提前 commit 释放行锁。
+    """
     pool, rolled = await ensure_period_pool(session, period_ym)
-    if rolled:
+    if rolled and commit_if_rolled:
         await session.commit()
     return pool
 
 
 async def get_next_pool(session: AsyncSession, period_ym: str) -> dict[str, Any]:
-    _, rolled = await ensure_period_pool(session, period_ym)
-    if rolled:
-        await session.commit()
+    """读取下月奖池（会顺带 ensure 本月周期）。"""
+    await get_current_pool(session, period_ym, commit_if_rolled=True)
     nxt = await _read_json(session, KEY_NEXT)
     return normalize_pool(nxt)
 
@@ -173,10 +181,8 @@ async def get_next_pool(session: AsyncSession, period_ym: str) -> dict[str, Any]
 async def save_next_pool(
     session: AsyncSession, period_ym: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    """管理端保存下月奖池（本月不生效）。"""
-    _, rolled = await ensure_period_pool(session, period_ym)
-    if rolled:
-        await session.flush()
+    """管理端保存下月奖池（本月不生效）；不 commit。"""
+    await ensure_period_pool(session, period_ym)
     pool = normalize_pool(payload)
     await _write_json(session, KEY_NEXT, pool)
     await session.flush()

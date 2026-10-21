@@ -8,10 +8,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.membership_rules import MEMBER_TIERS, next_tier_progress, tier_for_spent
+from app.membership_rules import next_tier_progress, tier_for_spent
 from app.models import User
 from app.models.lucky_wheel import LuckyWheelSpin
 from app.services import app_settings as settings_service
@@ -22,18 +22,14 @@ from app.services import wallet as wallet_service
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
-def now_shanghai() -> datetime:
-    return datetime.now(SHANGHAI)
-
-
 def current_period_ym(now: datetime | None = None) -> str:
-    stamp = now or now_shanghai()
+    stamp = now or datetime.now(SHANGHAI)
     return stamp.strftime("%Y-%m")
 
 
 def month_end_countdown(now: datetime | None = None) -> dict[str, int]:
     """距下月 1 日 0 点（上海）的天/时/分。"""
-    stamp = now or now_shanghai()
+    stamp = now or datetime.now(SHANGHAI)
     if stamp.month == 12:
         next_month = stamp.replace(
             year=stamp.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
@@ -42,12 +38,13 @@ def month_end_countdown(now: datetime | None = None) -> dict[str, int]:
         next_month = stamp.replace(
             month=stamp.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
-    delta = next_month - stamp
-    total_seconds = max(0, int(delta.total_seconds()))
-    days = total_seconds // 86400
-    hours = (total_seconds % 86400) // 3600
-    minutes = (total_seconds % 3600) // 60
-    return {"days": days, "hours": hours, "minutes": minutes, "total_seconds": total_seconds}
+    total_seconds = max(0, int((next_month - stamp).total_seconds()))
+    return {
+        "days": total_seconds // 86400,
+        "hours": (total_seconds % 86400) // 3600,
+        "minutes": (total_seconds % 3600) // 60,
+        "total_seconds": total_seconds,
+    }
 
 
 def mask_display_name(name: str) -> str:
@@ -87,25 +84,33 @@ def build_probabilities(
         jackpot_total = 1.0
 
     rest = max(0.0, 1.0 - jackpot_total)
-    weight_sum = sum(max(0, int(s.get("weight") or 0)) for s in points) or 1
-
-    raw: list[tuple[int, float]] = []
-    for s in jackpots:
-        raw.append((int(s["index"]), jackpot_prob_each))
-    for s in points:
-        w = max(0, int(s.get("weight") or 0))
-        raw.append((int(s["index"]), rest * (w / weight_sum)))
+    raw: list[tuple[int, float]] = [
+        (int(s["index"]), jackpot_prob_each) for s in jackpots
+    ]
+    if points:
+        weights = [max(0, int(s.get("weight") or 0)) for s in points]
+        weight_sum = sum(weights)
+        if weight_sum <= 0:
+            # 权重全 0 时在积分格间均分剩余概率，避免抽不到
+            share = rest / len(points)
+            raw.extend((int(s["index"]), share) for s in points)
+        else:
+            raw.extend(
+                (int(s["index"]), rest * (w / weight_sum))
+                for s, w in zip(points, weights)
+            )
 
     total = sum(p for _, p in raw) or 1.0
     return [(idx, p / total) for idx, p in raw]
 
 
 def pick_slot(probs: list[tuple[int, float]]) -> int:
+    """按权重抽样；浮点误差时落到最后一格。"""
     r = random.random()
     acc = 0.0
-    for idx, p in probs:
+    for idx, p in probs[:-1]:
         acc += p
-        if r <= acc:
+        if r < acc:
             return idx
     return probs[-1][0]
 
@@ -131,7 +136,11 @@ async def get_state(session: AsyncSession, user: User) -> dict[str, Any]:
     drawn = {s.slot_index for s in spins}
     spin_count = len(spins)
     costs: list[int] = list(pool["costs"])
-    exhausted = spin_count >= len(costs) or len(drawn) >= len(pool["slots"])
+    exhausted = (
+        not costs
+        or spin_count >= len(costs)
+        or len(drawn) >= len(pool["slots"])
+    )
     next_cost = None if exhausted else int(costs[spin_count])
     slots_out = []
     for slot in pool["slots"]:
@@ -225,13 +234,20 @@ async def spin(session: AsyncSession, user: User, *, confirmed: bool) -> dict[st
     user = locked.scalar_one()
 
     period = current_period_ym()
-    pool = await pool_config.get_current_pool(session, period)
+    # 事务内不 commit，避免释放 with_for_update 行锁
+    pool = await pool_config.get_current_pool(
+        session, period, commit_if_rolled=False
+    )
     spins = await _user_spins(session, user.id, period)
     drawn = {s.slot_index for s in spins}
     spin_count = len(spins)
     costs: list[int] = list(pool["costs"])
 
-    if spin_count >= len(costs) or len(drawn) >= len(pool["slots"]):
+    if (
+        not costs
+        or spin_count >= len(costs)
+        or len(drawn) >= len(pool["slots"])
+    ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "本月奖池已抽完，下月重置")
 
     cost = int(costs[spin_count])
@@ -249,7 +265,9 @@ async def spin(session: AsyncSession, user: User, *, confirmed: bool) -> dict[st
 
     chosen_index = pick_slot(probs)
     slot_map = {int(s["index"]): s for s in pool["slots"]}
-    slot = slot_map[chosen_index]
+    slot = slot_map.get(chosen_index)
+    if slot is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "奖池配置异常")
     is_jackpot = _slot_is_jackpot(slot)
 
     await wallet_service.debit_wallet(
@@ -353,12 +371,9 @@ async def admin_list_spins(
         count_stmt = count_stmt.where(LuckyWheelSpin.is_jackpot.is_(True))
     if q:
         like = f"%{q.strip()}%"
-        stmt = stmt.where(
-            (User.username.ilike(like)) | (User.display_name.ilike(like))
-        )
-        count_stmt = count_stmt.where(
-            (User.username.ilike(like)) | (User.display_name.ilike(like))
-        )
+        name_match = or_(User.username.ilike(like), User.display_name.ilike(like))
+        stmt = stmt.where(name_match)
+        count_stmt = count_stmt.where(name_match)
 
     total = int(await session.scalar(count_stmt) or 0)
     result = await session.execute(
@@ -394,7 +409,6 @@ async def admin_get_config(session: AsyncSession) -> dict[str, Any]:
         "period_ym": period,
         "current": current,
         "next": nxt,
-        "tiers": list(MEMBER_TIERS),
         "note": "修改 next 将于下月 1 日生效；当前月奖池不受影响。",
     }
 

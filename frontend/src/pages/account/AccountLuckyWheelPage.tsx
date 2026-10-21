@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { accountApi } from '@/api/account'
@@ -10,9 +10,13 @@ import { errorMessage, useAuthActions, useCurrentUser } from '@/hooks/useAuth'
 const GOLD = '#d4af37'
 const GOLD_DIM = '#8a7340'
 const BLACK = '#0c0a08'
+const SPIN_MS = 4200
+
+function toRad(deg: number) {
+  return ((deg - 90) * Math.PI) / 180
+}
 
 function sectorPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
-  const toRad = (d: number) => ((d - 90) * Math.PI) / 180
   const x1 = cx + r * Math.cos(toRad(startDeg))
   const y1 = cy + r * Math.sin(toRad(startDeg))
   const x2 = cx + r * Math.cos(toRad(endDeg))
@@ -21,8 +25,7 @@ function sectorPath(cx: number, cy: number, r: number, startDeg: number, endDeg:
   return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`
 }
 
-function labelPosition(cx: number, cy: number, r: number, midDeg: number) {
-  const toRad = (d: number) => ((d - 90) * Math.PI) / 180
+function labelPos(cx: number, cy: number, r: number, midDeg: number) {
   return {
     x: cx + r * 0.62 * Math.cos(toRad(midDeg)),
     y: cy + r * 0.62 * Math.sin(toRad(midDeg)),
@@ -46,7 +49,6 @@ function WheelDisk({
 
   return (
     <div className="relative mx-auto h-[min(72vw,420px)] w-[min(72vw,420px)]">
-      {/* 外环光晕 */}
       <div
         className="absolute inset-0 rounded-full opacity-80"
         style={{
@@ -61,7 +63,7 @@ function WheelDisk({
         style={{
           transform: `rotate(${rotation}deg)`,
           transition: spinning
-            ? 'transform 4.2s cubic-bezier(0.12, 0.75, 0.08, 1)'
+            ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.08, 1)`
             : 'none',
         }}
       >
@@ -78,7 +80,7 @@ function WheelDisk({
           const start = i * step
           const end = (i + 1) * step
           const mid = start + step / 2
-          const pos = labelPosition(cx, cy, r, mid)
+          const pos = labelPos(cx, cy, r, mid)
           const jackpot = slot.jackpot
           const drawn = slot.drawn
           const fill = drawn
@@ -90,13 +92,12 @@ function WheelDisk({
               : i % 2 === 0
                 ? '#161310'
                 : '#1c1812'
-          const stroke = drawn ? '#3a342c' : GOLD_DIM
           return (
             <g key={slot.index}>
               <path
                 d={sectorPath(cx, cy, r, start, end)}
                 fill={fill}
-                stroke={stroke}
+                stroke={drawn ? '#3a342c' : GOLD_DIM}
                 strokeWidth={1}
                 opacity={drawn ? 0.45 : 1}
               />
@@ -128,7 +129,6 @@ function WheelDisk({
           LUCKY
         </text>
       </svg>
-      {/* 顶部指针 */}
       <div
         className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1"
         aria-hidden
@@ -146,13 +146,14 @@ export default function AccountLuckyWheelPage() {
   const { user } = useCurrentUser()
   const { cacheUser } = useAuthActions()
   const queryClient = useQueryClient()
+  const spinTimerRef = useRef<number | null>(null)
+
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [rechargeOpen, setRechargeOpen] = useState(false)
-  const [hint, setHint] = useState('')
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
-  const [pendingResult, setPendingResult] = useState<string | null>(null)
 
   const stateQuery = useQuery({
     queryKey: ['lucky-wheel', 'state'],
@@ -168,8 +169,12 @@ export default function AccountLuckyWheelPage() {
   const slots = state?.slots ?? []
   const exhausted = Boolean(state?.exhausted)
   const nextCost = state?.next_cost_yuan
-  const canAfford =
-    nextCost != null && (state?.wallet_balance ?? user?.wallet_balance ?? 0) >= nextCost
+  const wallet = state?.wallet_balance ?? user?.wallet_balance ?? 0
+  const spinCount = state?.spin_count ?? 0
+  const maxSpins = state?.max_spins ?? 11
+  // 抽完后显示已抽次数，未抽完显示「即将第几次」
+  const spinLabel = exhausted ? spinCount : spinCount + 1
+  const canAfford = nextCost != null && wallet >= nextCost
 
   const countdownText = useMemo(() => {
     const c = state?.countdown
@@ -177,46 +182,58 @@ export default function AccountLuckyWheelPage() {
     return `${c.days} 天 ${c.hours} 时 ${c.minutes} 分`
   }, [state?.countdown])
 
-  const refreshMe = async () => {
+  useEffect(() => {
+    return () => {
+      if (spinTimerRef.current != null) {
+        window.clearTimeout(spinTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!message) return
+    const t = window.setTimeout(() => setMessage(''), 4000)
+    return () => window.clearTimeout(t)
+  }, [message])
+
+  const syncUser = async () => {
     const me = await accountApi.me()
     cacheUser(me.user)
     void queryClient.invalidateQueries({ queryKey: ['account'] })
-    void queryClient.invalidateQueries({ queryKey: ['lucky-wheel'] })
   }
 
   const spinMut = useMutation({
     mutationFn: () => luckyWheelApi.spin(true),
-    onSuccess: async (data) => {
-      const n = Math.max(data.state.slots.length, 1)
+    onSuccess: (data) => {
+      const list = data.state.slots
+      const n = Math.max(list.length, 1)
       const step = 360 / n
-      // 按 slots 数组顺序定位扇区（与绘制一致）
-      const orderIndex = data.state.slots.findIndex((s) => s.index === data.result.slot_index)
+      const orderIndex = list.findIndex((s) => s.index === data.result.slot_index)
       const targetIndex = orderIndex >= 0 ? orderIndex : data.result.slot_index
       const slotCenter = targetIndex * step + step / 2
+
       setSpinning(true)
       setRotation((prev) => {
-        const base = prev % 360
+        const base = ((prev % 360) + 360) % 360
         return prev + 360 * 5 + (360 - slotCenter) - base
       })
-      setPendingResult(
+      setMessage(
         data.result.is_jackpot
           ? `大奖！${data.result.prize_label}${data.result.remark ? ` · ${data.result.remark}` : ''}`
           : `恭喜获得 ${data.result.prize_label}${
               data.result.points_awarded ? `（+${data.result.points_awarded} 积分）` : ''
             }`,
       )
-      window.setTimeout(async () => {
+
+      if (spinTimerRef.current != null) {
+        window.clearTimeout(spinTimerRef.current)
+      }
+      spinTimerRef.current = window.setTimeout(() => {
         setSpinning(false)
-        setHint(
-          data.result.is_jackpot
-            ? `大奖揭晓：${data.result.prize_label}`
-            : `抽中 ${data.result.prize_label}`,
-        )
-        setPendingResult(null)
-        await refreshMe()
         queryClient.setQueryData(['lucky-wheel', 'state'], data.state)
         void queryClient.invalidateQueries({ queryKey: ['lucky-wheel', 'barrage'] })
-      }, 4300)
+        void syncUser()
+      }, SPIN_MS + 100)
     },
     onError: (err) => {
       const msg = errorMessage(err)
@@ -232,23 +249,16 @@ export default function AccountLuckyWheelPage() {
     onSuccess: async () => {
       setRechargeOpen(false)
       setError('')
-      setHint('充值成功')
-      await refreshMe()
+      setMessage('充值成功')
+      await syncUser()
       void stateQuery.refetch()
     },
     onError: (err) => setError(errorMessage(err)),
   })
 
-  useEffect(() => {
-    if (!hint) return
-    const t = window.setTimeout(() => setHint(''), 4000)
-    return () => window.clearTimeout(t)
-  }, [hint])
-
   const onClickSpin = () => {
     setError('')
-    if (exhausted) return
-    if (nextCost == null) return
+    if (exhausted || nextCost == null) return
     if (!canAfford) {
       setError('余额不足，请先充值')
       setRechargeOpen(true)
@@ -263,6 +273,8 @@ export default function AccountLuckyWheelPage() {
     spinMut.mutate()
   }
 
+  const busy = spinning || spinMut.isPending
+
   return (
     <div
       className="-m-6 overflow-hidden rounded-[inherit]"
@@ -273,7 +285,6 @@ export default function AccountLuckyWheelPage() {
       }}
     >
       <div className="relative px-5 pb-10 pt-5">
-        {/* 左上角倒计时 */}
         <div className="absolute left-5 top-5 z-20">
           <p className="text-[10px] tracking-[0.2em] text-[#a8945c] uppercase">本期剩余</p>
           <p className="mt-1 font-serif text-lg tracking-wide text-[#f5e6a6] tabular-nums">
@@ -282,13 +293,11 @@ export default function AccountLuckyWheelPage() {
           <p className="mt-0.5 text-xs text-[#7a6b4a]">{state?.period_ym ?? '—'} 期</p>
         </div>
 
-        {/* 弹幕 */}
         <div className="pointer-events-none absolute right-4 top-5 z-20 w-[min(42%,220px)] space-y-1.5 overflow-hidden">
-          {(barrageQuery.data ?? []).slice(0, 10).map((item, i) => (
+          {(barrageQuery.data ?? []).map((item, i) => (
             <div
               key={`${item.created_at}-${i}`}
-              className="animate-pulse truncate rounded-full border border-[#d4af37]/25 bg-black/40 px-3 py-1 text-[11px] text-[#e8d9a8]"
-              style={{ animationDelay: `${i * 0.15}s` }}
+              className="truncate rounded-full border border-[#d4af37]/25 bg-black/40 px-3 py-1 text-[11px] text-[#e8d9a8]"
             >
               {item.masked_name} 抽中 {item.prize_label}
             </div>
@@ -318,14 +327,10 @@ export default function AccountLuckyWheelPage() {
 
         <div className="mx-auto mt-8 max-w-md text-center">
           <p className="text-sm text-[#c4b48a]">
-            余额{' '}
-            <span className="tabular-nums text-[#f5e6a6]">
-              ¥{state?.wallet_balance ?? user?.wallet_balance ?? 0}
-            </span>
+            余额 <span className="tabular-nums text-[#f5e6a6]">¥{wallet}</span>
             <span className="mx-2 text-[#5c5340]">·</span>
-            本月第{' '}
-            <span className="tabular-nums text-[#f5e6a6]">{(state?.spin_count ?? 0) + 1}</span> /{' '}
-            {state?.max_spins ?? 11} 次
+            {exhausted ? '本月已抽' : '本月第'}{' '}
+            <span className="tabular-nums text-[#f5e6a6]">{spinLabel}</span> / {maxSpins} 次
           </p>
 
           {exhausted ? (
@@ -340,16 +345,14 @@ export default function AccountLuckyWheelPage() {
             <button
               type="button"
               onClick={onClickSpin}
-              disabled={spinning || spinMut.isPending || stateQuery.isLoading}
+              disabled={busy || stateQuery.isLoading}
               className="mt-5 w-full max-w-xs rounded-full py-3.5 text-sm font-semibold tracking-wide text-[#1a1205] transition hover:brightness-110 disabled:opacity-60"
               style={{
                 background: 'linear-gradient(135deg, #f5e6a6 0%, #d4af37 45%, #a67c00 100%)',
                 boxShadow: '0 8px 32px rgba(212,175,55,0.35)',
               }}
             >
-              {spinning || spinMut.isPending
-                ? '命运转动中…'
-                : `抽取好运 · ¥${nextCost ?? '—'}`}
+              {busy ? '命运转动中…' : `抽取好运 · ¥${nextCost ?? '—'}`}
             </button>
           )}
 
@@ -359,12 +362,7 @@ export default function AccountLuckyWheelPage() {
             </Link>
           </p>
 
-          {pendingResult && (
-            <p className="mt-4 text-sm font-medium text-[#f5e6a6]">{pendingResult}</p>
-          )}
-          {hint && !pendingResult && (
-            <p className="mt-4 text-sm text-[#d4af37]">{hint}</p>
-          )}
+          {message && <p className="mt-4 text-sm font-medium text-[#f5e6a6]">{message}</p>}
           {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
         </div>
 
@@ -397,11 +395,9 @@ export default function AccountLuckyWheelPage() {
               本次将扣除{' '}
               <span className="font-semibold text-[#f5e6a6]">¥{nextCost}</span>
               <br />
-              当前余额{' '}
-              <span className="tabular-nums">¥{state?.wallet_balance ?? 0}</span>
+              当前余额 <span className="tabular-nums">¥{wallet}</span>
               <br />
-              本月第{' '}
-              <span className="tabular-nums">{(state?.spin_count ?? 0) + 1}</span> 次抽奖
+              本月第 <span className="tabular-nums">{spinCount + 1}</span> 次抽奖
             </p>
             <div className="mt-6 flex gap-3">
               <button
@@ -414,9 +410,7 @@ export default function AccountLuckyWheelPage() {
               <button
                 type="button"
                 className="flex-1 rounded-full py-2.5 text-sm font-semibold text-[#1a1205]"
-                style={{
-                  background: 'linear-gradient(135deg, #f5e6a6, #d4af37)',
-                }}
+                style={{ background: 'linear-gradient(135deg, #f5e6a6, #d4af37)' }}
                 onClick={confirmSpin}
               >
                 确认抽取
@@ -428,7 +422,7 @@ export default function AccountLuckyWheelPage() {
 
       <RechargeModal
         open={rechargeOpen}
-        walletBalance={state?.wallet_balance ?? user?.wallet_balance ?? 0}
+        walletBalance={wallet}
         busy={recharge.isPending}
         error={recharge.isError ? errorMessage(recharge.error) : undefined}
         onClose={() => setRechargeOpen(false)}
