@@ -33,6 +33,7 @@ class GenerateCompatIn(BaseModel):
     width: int | None = None
     height: int | None = None
     image_provider: Literal["mock", "dashscope"] | None = None
+    image_model: str | None = Field(default=None, max_length=128)
 
 
 @router.get("/provider-options", response_model=ImageProviderOptionsOut)
@@ -64,6 +65,7 @@ async def create_generation(
         height=height,
         count=body.count,
         image_provider=body.image_provider,
+        image_model=body.image_model,
     )
     return await tools_service.get_run_compat(db, created.generation_id)
 

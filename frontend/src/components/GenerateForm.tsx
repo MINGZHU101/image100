@@ -1,6 +1,13 @@
-import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 
-import { RATIO_LABELS, type GenerateInput, type Ratio } from '@/api/runs'
+import {
+  RATIO_LABELS,
+  imageModelLabel,
+  runsApi,
+  type GenerateInput,
+  type Ratio,
+} from '@/api/runs'
 
 const RATIOS = Object.keys(RATIO_LABELS) as Ratio[]
 const COUNTS = [1, 2, 4, 6]
@@ -19,6 +26,23 @@ export default function GenerateForm({
   const [count, setCount] = useState(4)
   const [negative, setNegative] = useState('')
   const [advanced, setAdvanced] = useState(false)
+  const [imageModel, setImageModel] = useState('')
+
+  const { data: options } = useQuery({
+    queryKey: ['generations', 'provider-options'],
+    queryFn: () => runsApi.providerOptions(),
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (!options) return
+    if (!imageModel) setImageModel(options.default_image_model)
+  }, [options, imageModel])
+
+  const models = options?.image_models?.length
+    ? options.image_models
+    : ['qwen-image-2.0-pro-2026-06-22', 'qwen-image-3.0-pro']
+  const selectedModel = imageModel || options?.default_image_model || models[0]
 
   const canSubmit = prompt.trim().length > 0 && !pending
 
@@ -32,6 +56,7 @@ export default function GenerateForm({
           ratio,
           count,
           negative_prompt: negative.trim() || undefined,
+          image_model: selectedModel,
         })
       }}
       className="border-line bg-paper shadow-panel rounded-panel border p-2"
@@ -64,6 +89,15 @@ export default function GenerateForm({
           value={count}
           onChange={setCount}
         />
+        <Segmented
+          label="模型"
+          options={models.map((value) => ({
+            value,
+            label: imageModelLabel(value),
+          }))}
+          value={selectedModel}
+          onChange={setImageModel}
+        />
 
         <button
           type="button"
@@ -82,7 +116,9 @@ export default function GenerateForm({
         </button>
       </div>
       <p className="text-faint px-3 pb-2 text-[11px]">
-        {pending ? '任务已提交，稍后会跳到候选页' : '回车生成 · Shift+Enter 换行'}
+        {pending
+          ? '任务已提交，稍后会跳到候选页'
+          : `当前模型 ${imageModelLabel(selectedModel)} · 回车生成 · Shift+Enter 换行`}
       </p>
 
       {advanced && (
@@ -116,7 +152,7 @@ function Segmented<T extends string | number>({
       <span className="text-faint px-1.5 text-xs">{label}</span>
       {options.map((option) => (
         <button
-          key={option.value}
+          key={String(option.value)}
           type="button"
           onClick={() => onChange(option.value)}
           aria-pressed={option.value === value}

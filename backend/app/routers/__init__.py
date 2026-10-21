@@ -7,8 +7,10 @@ from app.routers import (
     admin,
     agent,
     assets,
+    assistant,
     auth,
     batches,
+    copywriting,
     events,
     export,
     generations,
@@ -31,3 +33,5 @@ api_router.include_router(export.router)
 api_router.include_router(agent.router)
 api_router.include_router(generations.router)
 api_router.include_router(batches.router)
+api_router.include_router(copywriting.router)
+api_router.include_router(assistant.router)

@@ -23,6 +23,7 @@ import AdminUsersPage from '@/pages/admin/AdminUsersPage'
 import AuthPage from '@/pages/AuthPage'
 import BatchPage from '@/pages/BatchPage'
 import CandidatesPage from '@/pages/CandidatesPage'
+import CopywritingPage from '@/pages/CopywritingPage'
 import CreatePage from '@/pages/CreatePage'
 import EditorPage from '@/pages/EditorPage'
 import LandingPage from '@/pages/LandingPage'
@@ -53,6 +54,7 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<WorkbenchLayout />}>
             <Route path="/create" element={<CreatePage />} />
+            <Route path="/copywriting" element={<CopywritingPage />} />
             <Route path="/editor" element={<EditorPage />} />
             <Route path="/editor/:sessionId" element={<EditorPage />} />
             <Route path="/marketing" element={<MarketingPage />} />

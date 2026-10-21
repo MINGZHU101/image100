@@ -25,6 +25,7 @@ class ImageProvider(Protocol):
         width: int,
         height: int,
         count: int,
+        model: str | None = None,
     ) -> list[bytes]:
         """返回 count 张 PNG 字节。"""
         ...
@@ -52,7 +53,9 @@ class MockImageProvider:
         width: int,
         height: int,
         count: int,
+        model: str | None = None,
     ) -> list[bytes]:
+        _ = model
         seed = int(hashlib.sha256(prompt.encode()).hexdigest()[:8], 16)
         return [
             _render_placeholder(prompt, width, height, seed + index * 977, index)
@@ -72,14 +75,16 @@ class DashscopeImageProvider:
         width: int,
         height: int,
         count: int,
+        model: str | None = None,
     ) -> list[bytes]:
         settings = get_settings()
         if not settings.dashscope_api_key:
             raise ImageProviderError("未配置 DASHSCOPE_API_KEY，请切换到 Mock")
 
+        model_name = (model or settings.text_to_image_model).strip()
         # 原生协议：size 用星号，n 为张数
         payload = {
-            "model": settings.text_to_image_model,
+            "model": model_name,
             "input": {
                 "messages": [
                     {"role": "user", "content": [{"text": prompt}]},

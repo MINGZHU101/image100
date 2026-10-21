@@ -15,6 +15,7 @@ const POINT_KIND_LABEL: Record<string, string> = {
   exchange_from_wallet: '余额兑换',
   consume_agent: 'Agent 消耗',
   consume_generation: '文生图消耗',
+  consume_copywriting: '文案生成',
   mock_recharge: '模拟充值（旧）',
 }
 

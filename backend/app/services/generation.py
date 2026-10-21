@@ -31,11 +31,27 @@ def provider_options() -> ImageProviderOptionsOut:
     if default not in ("mock", "dashscope"):
         default = "dashscope"
     has_key = bool(settings.dashscope_api_key)
+    models = list(settings.text_to_image_models or [])
+    if settings.text_to_image_model and settings.text_to_image_model not in models:
+        models.insert(0, settings.text_to_image_model)
     return ImageProviderOptionsOut(
         default_provider=default if default == "mock" or has_key else "mock",
         dashscope_available=has_key,
         providers=["mock", "dashscope"],
+        default_image_model=settings.text_to_image_model,
+        image_models=models,
     )
+
+
+def resolve_image_model(requested: str | None) -> str:
+    """校验请求模型是否在白名单；非法则回落默认。"""
+    settings = get_settings()
+    allowed = set(settings.text_to_image_models or [])
+    allowed.add(settings.text_to_image_model)
+    name = (requested or settings.text_to_image_model or "").strip()
+    if name in allowed:
+        return name
+    return settings.text_to_image_model
 
 
 def _resolve_provider(requested: str | None) -> str:
@@ -78,12 +94,19 @@ async def create_generation(
     height: int,
     count: int,
     image_provider: str | None,
+    image_model: str | None = None,
 ) -> GenerationCreateOut:
     provider = _resolve_provider(image_provider)
+    model_name = resolve_image_model(image_model)
     row = GenerationRun(
         owner_id=user.id,
         prompt=prompt.strip(),
-        params={"width": width, "height": height, "count": count},
+        params={
+            "width": width,
+            "height": height,
+            "count": count,
+            "image_model": model_name,
+        },
         image_provider=provider,
         status="queued",
         progress=0,
@@ -126,15 +149,55 @@ async def execute_generation(session: AsyncSession, generation_id: UUID) -> dict
         {"event": "progress", "run_id": str(row.id), "progress": 10, "message": "开始生成"},
     )
 
-    params = row.params or {}
+    params = dict(row.params or {})
+    width = int(params.get("width") or 1024)
+    height = int(params.get("height") or 1024)
+    count = int(params.get("count") or 1)
     try:
         provider = get_image_provider(row.image_provider)
-        images = await provider.generate(
-            prompt=row.prompt,
-            width=int(params.get("width") or 1024),
-            height=int(params.get("height") or 1024),
-            count=int(params.get("count") or 1),
+        image_model = resolve_image_model(
+            str(params.get("image_model") or "") or None
         )
+        params["image_model"] = image_model
+        # count≥2：先改写/扩写提示词，再逐张生成，避免同 prompt 雷同
+        if count >= 2:
+            from app.services.prompt_variants import build_prompt_variants
+
+            variants = await build_prompt_variants(row.prompt, count)
+            params["prompt_variants"] = variants
+            row.params = params
+            flag_modified(row, "params")
+            await session.commit()
+            images: list[bytes] = []
+            for index, variant in enumerate(variants):
+                part = await provider.generate(
+                    prompt=variant,
+                    width=width,
+                    height=height,
+                    count=1,
+                    model=image_model,
+                )
+                images.extend(part)
+                progress = 10 + int(10 * (index + 1) / max(count, 1))
+                row.progress = progress
+                await session.commit()
+                await publish_event(
+                    row.id,
+                    {
+                        "event": "progress",
+                        "run_id": str(row.id),
+                        "progress": progress,
+                        "message": f"正在生成第 {index + 1}/{count} 张",
+                    },
+                )
+        else:
+            images = await provider.generate(
+                prompt=row.prompt,
+                width=width,
+                height=height,
+                count=1,
+                model=image_model,
+            )
     except ImageProviderError as exc:
         row.status = "failed"
         row.error = str(exc)

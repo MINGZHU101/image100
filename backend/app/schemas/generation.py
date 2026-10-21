@@ -39,3 +39,6 @@ class ImageProviderOptionsOut(BaseModel):
     default_provider: Literal["mock", "dashscope"]
     dashscope_available: bool
     providers: list[Literal["mock", "dashscope"]]
+    # 文生图模型白名单与默认值（前端备选）
+    default_image_model: str
+    image_models: list[str]

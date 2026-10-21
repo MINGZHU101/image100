@@ -57,10 +57,21 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     planner_model: str = "qwen-plus"
+    # v12：文案看图 / RAG embedding
+    # 百炼视觉模型；旧名 qwen-vl-plus 在部分账号会 404，默认用现网文档示例
+    vision_model: str = "qwen3-vl-plus"
+    embedding_model: str = "text-embedding-v3"
+    rag_persist_dir: str = "./data/rag_chroma"
+    rag_collection: str = "workbench_guide"
 
     # v5：文生图默认 dashscope；前端可按次覆盖为 mock
     image_provider: str = "dashscope"
-    text_to_image_model: str = "qwen-image-3.0-pro"
+    # 默认用 2.0 备选（3.0 免费额度紧张时可切换）；白名单见 text_to_image_models
+    text_to_image_model: str = "qwen-image-2.0-pro-2026-06-22"
+    text_to_image_models: Annotated[list[str], NoDecode] = [
+        "qwen-image-2.0-pro-2026-06-22",
+        "qwen-image-3.0-pro",
+    ]
     # 文生图走 DashScope 原生多模态接口，与规划器的 compatible-mode 分开
     dashscope_image_url: str = (
         "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
@@ -76,12 +87,25 @@ class Settings(BaseSettings):
     langsmith_project: str = "image100"
 
     @field_validator("cors_origins", mode="before")
-
     @classmethod
     def split_cors_origins(cls, value: object) -> object:
         """支持环境变量写成逗号分隔字符串。"""
         if value is None or value == "":
             value = _DEFAULT_CORS
+        if isinstance(value, str):
+            parts = [item.strip() for item in value.split(",")]
+            return [item for item in parts if item]
+        return value
+
+    @field_validator("text_to_image_models", mode="before")
+    @classmethod
+    def split_image_models(cls, value: object) -> object:
+        """支持 TEXT_TO_IMAGE_MODELS=model_a,model_b。"""
+        if value is None or value == "":
+            return [
+                "qwen-image-2.0-pro-2026-06-22",
+                "qwen-image-3.0-pro",
+            ]
         if isinstance(value, str):
             parts = [item.strip() for item in value.split(",")]
             return [item for item in parts if item]
@@ -95,6 +119,14 @@ class Settings(BaseSettings):
     def storage_root(self) -> Path:
         """本地存储绝对路径（相对路径基于项目根）。"""
         path = Path(self.local_storage_dir)
+        if path.is_absolute():
+            return path
+        return (ROOT_DIR / path).resolve()
+
+    @property
+    def rag_root(self) -> Path:
+        """RAG 向量库持久化目录。"""
+        path = Path(self.rag_persist_dir)
         if path.is_absolute():
             return path
         return (ROOT_DIR / path).resolve()

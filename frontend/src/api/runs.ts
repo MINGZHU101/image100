@@ -23,6 +23,15 @@ export type GenerateInput = {
   count: number
   negative_prompt?: string
   reference_asset_ids?: string[]
+  image_model?: string
+}
+
+export type ImageProviderOptions = {
+  default_provider: 'mock' | 'dashscope'
+  dashscope_available: boolean
+  providers: Array<'mock' | 'dashscope'>
+  default_image_model: string
+  image_models: string[]
 }
 
 export const RATIO_LABELS: Record<Ratio, string> = {
@@ -40,4 +49,12 @@ export function isTerminal(status: RunStatus) {
 export const runsApi = {
   generate: (input: GenerateInput) => api.post<Run>('/generations', input),
   get: (id: string) => api.get<Run>(`/runs/${id}`),
+  providerOptions: () => api.get<ImageProviderOptions>('/generations/provider-options'),
+}
+
+/** 创作页展示用短名 */
+export function imageModelLabel(model: string): string {
+  if (model.includes('2.0')) return '通义万相 2.0'
+  if (model.includes('3.0')) return '通义万相 3.0'
+  return model
 }
