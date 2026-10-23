@@ -14,6 +14,13 @@ export function useBatches() {
   return useQuery({ queryKey: LIST_KEY, queryFn: batchesApi.list })
 }
 
+function itemsStillRunning(items: { status: string }[] | undefined): boolean {
+  if (!items?.length) return false
+  return items.some(
+    (item) => item.status === 'pending' || item.status === 'queued' || item.status === 'running',
+  )
+}
+
 export function useBatch(id: string | null) {
   const live = useRun(id)
   const queryClient = useQueryClient()
@@ -21,14 +28,25 @@ export function useBatch(id: string | null) {
     queryKey: batchKey(id ?? ''),
     queryFn: () => batchesApi.get(id as string),
     enabled: Boolean(id),
-    refetchInterval: id && live.status && !isTerminal(live.status) ? 1200 : false,
+    // 按「整批」是否结束轮询，避免只看第一张跑完就停刷新
+    refetchInterval: (query) => {
+      if (!id) return false
+      if (itemsStillRunning(query.state.data?.items)) return 1200
+      if (live.status && !isTerminal(live.status)) return 1200
+      return false
+    },
   })
 
   useEffect(() => {
-    if (!id || !live.status || !isTerminal(live.status)) return
+    if (!id) return
+    const items = detail.data?.items
+    const batchDone = items?.length
+      ? !itemsStillRunning(items)
+      : Boolean(live.status && isTerminal(live.status))
+    if (!batchDone) return
     void queryClient.invalidateQueries({ queryKey: batchKey(id) })
     void queryClient.invalidateQueries({ queryKey: LIST_KEY })
-  }, [id, live.status, queryClient])
+  }, [id, live.status, detail.data?.items, queryClient])
 
   return { ...detail, live }
 }

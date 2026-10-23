@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 
 export default function AdminInvitesPage() {
@@ -11,33 +13,43 @@ export default function AdminInvitesPage() {
   })
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800">邀请概览</h2>
-      <p className="text-sm text-slate-500">已成功领取邀请奖励的用户</p>
-      <div className="overflow-hidden rounded-lg border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
+    <div className={adminUi.page}>
+      <AdminPageHeader
+        title="邀请概览"
+        description="已成功领取邀请奖励的用户列表。"
+      />
+      <div className={adminUi.tableWrap}>
+        <table className="w-full text-left">
+          <thead className={adminUi.thead}>
             <tr>
-              <th className="px-3 py-2">账号</th>
-              <th className="px-3 py-2">用户名</th>
-              <th className="px-3 py-2">会员</th>
-              <th className="px-3 py-2">注册时间</th>
+              {['账号', '用户名', '会员', '注册时间'].map((h) => (
+                <th key={h} className={adminUi.th}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {data?.items.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-3 py-2">{u.account}</td>
-                <td className="px-3 py-2">{u.display_name}</td>
-                <td className="px-3 py-2">{u.member_tier}</td>
-                <td className="px-3 py-2 text-slate-500">{u.created_at}</td>
+              <tr key={u.id} className="hover:bg-soft/60 transition-colors">
+                <td className={adminUi.td}>{u.account}</td>
+                <td className={adminUi.td}>{u.display_name}</td>
+                <td className={adminUi.td}>
+                  <span className={adminUi.badgeBrand}>{u.member_tier}</span>
+                </td>
+                <td className={`${adminUi.td} text-muted`}>{u.created_at}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="flex gap-2 text-sm">
-        <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border px-2 py-1 disabled:opacity-40">
+      <div className="text-muted flex gap-2 text-sm">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => setPage((p) => p - 1)}
+          className={adminUi.btnGhost}
+        >
           上一页
         </button>
         <span>共 {data?.total ?? 0} 条</span>
@@ -45,7 +57,7 @@ export default function AdminInvitesPage() {
           type="button"
           disabled={!data || page * data.page_size >= data.total}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
+          className={adminUi.btnGhost}
         >
           下一页
         </button>

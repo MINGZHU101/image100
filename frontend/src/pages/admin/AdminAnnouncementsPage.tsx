@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 import { toast } from '@/stores/toasts'
 
@@ -14,8 +16,7 @@ export default function AdminAnnouncementsPage() {
   })
 
   const create = useMutation({
-    mutationFn: () =>
-      adminApi.createAnnouncement({ title, body, is_published: true }),
+    mutationFn: () => adminApi.createAnnouncement({ title, body, is_published: true }),
     onSuccess: () => {
       toast('公告已发布')
       setTitle('')
@@ -35,52 +36,61 @@ export default function AdminAnnouncementsPage() {
   })
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800">公告管理</h2>
-      <div className="space-y-2 rounded-lg border bg-white p-4">
+    <div className={adminUi.page}>
+      <AdminPageHeader
+        title="公告管理"
+        description="发布站内公告，用户登录后可在工作台看到最新通知。"
+      />
+
+      <div className={`${adminUi.panelPad} space-y-3`}>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="标题"
-          className="w-full rounded border px-3 py-2 text-sm"
+          className={adminUi.input}
         />
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="正文"
           rows={3}
-          className="w-full rounded border px-3 py-2 text-sm"
+          className={adminUi.textarea}
         />
         <button
           type="button"
           disabled={!title.trim() || create.isPending}
           onClick={() => create.mutate()}
-          className="rounded bg-teal-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className={adminUi.btnPrimary}
         >
           发布公告
         </button>
       </div>
-      <ul className="space-y-2">
+
+      <ul className="space-y-3">
         {data?.map((item) => (
-          <li key={item.id} className="rounded-lg border bg-white p-3 text-sm">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-medium text-slate-800">{item.title}</p>
-                <p className="mt-1 text-slate-500">{item.body}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {item.is_published ? '已发布' : '已下线'} · {item.created_at}
-                </p>
+          <li key={item.id} className={`${adminUi.panelPad} text-sm`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-ink font-medium">{item.title}</p>
+                  <span className={item.is_published ? adminUi.badgeOk : adminUi.badgeWarn}>
+                    {item.is_published ? '已发布' : '已下线'}
+                  </span>
+                </div>
+                <p className="text-muted mt-1 whitespace-pre-wrap">{item.body}</p>
+                <p className="text-faint mt-2 text-xs">{item.created_at}</p>
               </div>
               <button
                 type="button"
                 onClick={() => toggle.mutate(item)}
-                className="shrink-0 text-teal-700 hover:underline"
+                className={`${adminUi.btnGhost} shrink-0`}
               >
                 {item.is_published ? '下线' : '上线'}
               </button>
             </div>
           </li>
         ))}
+        {!data?.length && <li className={adminUi.faint}>暂无公告</li>}
       </ul>
     </div>
   )

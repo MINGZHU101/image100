@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 import { toast } from '@/stores/toasts'
 
@@ -70,23 +72,28 @@ export default function AdminLuckyWheelPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <section>
-        <h2 className="text-lg font-semibold text-slate-800">幸运大转盘 · 全站记录</h2>
+    <div className={adminUi.page}>
+      <AdminPageHeader
+        title="幸运大转盘"
+        description="查看全站抽奖记录，并配置下月奖池（本月进行中的奖池不受影响）。"
+      />
+
+      <section className={adminUi.panelPad}>
+        <h3 className={adminUi.sectionTitle}>全站抽奖记录</h3>
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            账号/昵称
+          <label className={adminUi.field}>
+            <span className={adminUi.label}>账号/昵称</span>
             <input
               value={q}
               onChange={(e) => {
                 setPage(1)
                 setQ(e.target.value)
               }}
-              className="mt-1 block rounded border px-3 py-1.5"
+              className={adminUi.inputInline}
             />
           </label>
-          <label className="text-sm">
-            周期 YYYY-MM
+          <label className={adminUi.field}>
+            <span className={adminUi.label}>周期 YYYY-MM</span>
             <input
               value={period}
               onChange={(e) => {
@@ -94,10 +101,10 @@ export default function AdminLuckyWheelPage() {
                 setPeriod(e.target.value)
               }}
               placeholder="2026-10"
-              className="mt-1 block rounded border px-3 py-1.5"
+              className={adminUi.inputInline}
             />
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="text-ink flex items-center gap-2 pb-2 text-sm">
             <input
               type="checkbox"
               checked={jackpotOnly}
@@ -105,43 +112,45 @@ export default function AdminLuckyWheelPage() {
                 setPage(1)
                 setJackpotOnly(e.target.checked)
               }}
+              className="accent-brand"
             />
             仅大奖
           </label>
         </div>
-        <div className="mt-4 overflow-x-auto rounded border bg-white">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
+
+        <div className={`${adminUi.tableWrap} mt-4`}>
+          <table className="min-w-full text-left">
+            <thead className={adminUi.thead}>
               <tr>
-                <th className="px-3 py-2">时间</th>
-                <th className="px-3 py-2">账号</th>
-                <th className="px-3 py-2">周期</th>
-                <th className="px-3 py-2">次数</th>
-                <th className="px-3 py-2">费用</th>
-                <th className="px-3 py-2">奖项</th>
-                <th className="px-3 py-2">积分</th>
+                {['时间', '账号', '周期', '次数', '费用', '奖项', '积分'].map((h) => (
+                  <th key={h} className={adminUi.th}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {(spins.data?.items ?? []).map((row) => (
-                <tr key={row.id} className="border-t">
-                  <td className="px-3 py-2 text-xs text-slate-500">
+                <tr key={row.id} className="hover:bg-soft/60 transition-colors">
+                  <td className={`${adminUi.td} text-muted text-xs`}>
                     {new Date(row.created_at).toLocaleString()}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className={adminUi.td}>
                     {row.account}
-                    {row.is_jackpot ? ' ★' : ''}
+                    {row.is_jackpot ? (
+                      <span className={`${adminUi.badgeBrand} ml-1`}>大奖</span>
+                    ) : null}
                   </td>
-                  <td className="px-3 py-2">{row.period_ym}</td>
-                  <td className="px-3 py-2">{row.spin_index}</td>
-                  <td className="px-3 py-2">¥{row.cost_yuan}</td>
-                  <td className="px-3 py-2">{row.prize_label}</td>
-                  <td className="px-3 py-2">{row.points_awarded}</td>
+                  <td className={adminUi.td}>{row.period_ym}</td>
+                  <td className={adminUi.td}>{row.spin_index}</td>
+                  <td className={adminUi.td}>¥{row.cost_yuan}</td>
+                  <td className={adminUi.td}>{row.prize_label}</td>
+                  <td className={`${adminUi.td} tabular-nums`}>{row.points_awarded}</td>
                 </tr>
               ))}
               {!spins.data?.items.length && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={7} className={`${adminUi.td} text-faint text-center`}>
                     暂无记录
                   </td>
                 </tr>
@@ -149,11 +158,12 @@ export default function AdminLuckyWheelPage() {
             </tbody>
           </table>
         </div>
-        <div className="mt-2 flex items-center gap-3 text-sm text-slate-600">
+
+        <div className="text-muted mt-3 flex items-center gap-3 text-sm">
           <button
             type="button"
             disabled={page <= 1}
-            className="rounded border px-2 py-1 disabled:opacity-40"
+            className={adminUi.btnGhost}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             上一页
@@ -163,7 +173,7 @@ export default function AdminLuckyWheelPage() {
           </span>
           <button
             type="button"
-            className="rounded border px-2 py-1"
+            className={adminUi.btnGhost}
             onClick={() => setPage((p) => p + 1)}
             disabled={
               !spins.data || page * (spins.data.page_size || 20) >= spins.data.total
@@ -174,50 +184,52 @@ export default function AdminLuckyWheelPage() {
         </div>
       </section>
 
-      <section className="max-w-3xl space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">奖池配置（下月生效）</h2>
-        <p className="text-sm text-slate-500">
-          当前周期 {config.data?.period_ym ?? '—'}。{config.data?.note}
-        </p>
-        <p className="text-xs text-slate-400">
-          本月奖池只读：费用 [{(config.data?.current.costs ?? []).join(', ')}] ·{' '}
-          {(config.data?.current.slots ?? []).length} 格
-        </p>
+      <section className={`${adminUi.panelPad} max-w-3xl space-y-4`}>
+        <div>
+          <h3 className={adminUi.sectionTitle}>奖池配置（下月生效）</h3>
+          <p className={`${adminUi.muted} mt-1`}>
+            当前周期 {config.data?.period_ym ?? '—'}。{config.data?.note}
+          </p>
+          <p className={`${adminUi.faint} mt-1`}>
+            本月奖池只读：费用 [{(config.data?.current.costs ?? []).join(', ')}] ·{' '}
+            {(config.data?.current.slots ?? []).length} 格
+          </p>
+        </div>
 
-        <label className="block text-sm">
-          下月费用序列（逗号分隔，元）
+        <label className={adminUi.field}>
+          <span className={adminUi.label}>下月费用序列（逗号分隔，元）</span>
           <input
             value={costsText}
             onChange={(e) => setCostsText(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2 font-mono text-sm"
+            className={`${adminUi.input} font-mono`}
           />
         </label>
-        <label className="block text-sm">
-          单个大奖初始概率（0~1，前端不展示）
+        <label className={adminUi.field}>
+          <span className={adminUi.label}>单个大奖初始概率（0~1，前端不展示）</span>
           <input
             value={jackpotProb}
             onChange={(e) => setJackpotProb(e.target.value)}
-            className="mt-1 w-40 rounded border px-3 py-2"
+            className={`${adminUi.input} w-40`}
           />
         </label>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">下月扇区</p>
+          <p className={adminUi.sectionTitle}>下月扇区</p>
           {slots.map((slot, i) => (
             <div
               key={`${slot.index}-${i}`}
-              className="grid grid-cols-2 gap-2 rounded border bg-white p-3 md:grid-cols-6"
+              className="border-line bg-soft/40 grid grid-cols-2 gap-2 rounded-[12px] border p-3 md:grid-cols-6"
             >
               <label className="text-xs">
-                文案
+                <span className={adminUi.label}>文案</span>
                 <input
                   value={slot.label}
                   onChange={(e) => updateSlot(i, { label: e.target.value })}
-                  className="mt-1 w-full rounded border px-2 py-1"
+                  className={adminUi.input}
                 />
               </label>
               <label className="text-xs">
-                类型
+                <span className={adminUi.label}>类型</span>
                 <select
                   value={slot.kind}
                   onChange={(e) =>
@@ -226,7 +238,7 @@ export default function AdminLuckyWheelPage() {
                       jackpot: ['tier_up', 'jackpot_points'].includes(e.target.value),
                     })
                   }
-                  className="mt-1 w-full rounded border px-2 py-1"
+                  className={adminUi.select + ' w-full'}
                 >
                   <option value="points">积分</option>
                   <option value="tier_up">会员升一级</option>
@@ -234,29 +246,30 @@ export default function AdminLuckyWheelPage() {
                 </select>
               </label>
               <label className="text-xs">
-                积分面额
+                <span className={adminUi.label}>积分面额</span>
                 <input
                   type="number"
                   value={slot.points}
                   onChange={(e) => updateSlot(i, { points: Number(e.target.value) || 0 })}
-                  className="mt-1 w-full rounded border px-2 py-1"
+                  className={adminUi.input}
                 />
               </label>
               <label className="text-xs">
-                权重（积分格）
+                <span className={adminUi.label}>权重（积分格）</span>
                 <input
                   type="number"
                   value={slot.weight}
                   onChange={(e) => updateSlot(i, { weight: Number(e.target.value) || 0 })}
-                  className="mt-1 w-full rounded border px-2 py-1"
+                  className={adminUi.input}
                   disabled={Boolean(slot.jackpot) || slot.kind !== 'points'}
                 />
               </label>
-              <label className="flex items-end gap-2 text-xs md:col-span-2">
+              <label className="text-ink flex items-end gap-2 text-xs md:col-span-2">
                 <input
                   type="checkbox"
                   checked={Boolean(slot.jackpot)}
                   onChange={(e) => updateSlot(i, { jackpot: e.target.checked })}
+                  className="accent-brand"
                 />
                 大奖（弹幕）
               </label>
@@ -268,7 +281,7 @@ export default function AdminLuckyWheelPage() {
           type="button"
           disabled={save.isPending}
           onClick={() => save.mutate()}
-          className="rounded bg-teal-700 px-4 py-2 text-sm text-white disabled:opacity-60"
+          className={adminUi.btnPrimary}
         >
           保存下月配置
         </button>

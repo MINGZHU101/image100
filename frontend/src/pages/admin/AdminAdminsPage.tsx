@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 import { errorMessage } from '@/hooks/useAuth'
 import { toast } from '@/stores/toasts'
@@ -47,78 +49,78 @@ export default function AdminAdminsPage() {
   })
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-slate-800">管理员列表</h2>
-        <ul className="rounded-lg border bg-white divide-y">
-          {data?.map((a) => (
-            <li key={a.id} className="px-4 py-3 text-sm">
-              <span className="font-medium">{a.display_name}</span>
-              <span className="ml-2 text-slate-500">@{a.username}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="space-y-6">
-        <div className="space-y-2 rounded-lg border bg-white p-4">
-          <h3 className="font-medium">创建管理员</h3>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="账号"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="显示名"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="密码"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => create.mutate()}
-            className="rounded bg-teal-700 px-3 py-2 text-sm text-white"
-          >
-            创建
-          </button>
+    <div className={adminUi.page}>
+      <AdminPageHeader
+        title="管理员"
+        description="维护后台账号，并修改当前登录管理员的密码。"
+      />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className={adminUi.panelPad}>
+          <h3 className={adminUi.sectionTitle}>管理员列表</h3>
+          <ul className="border-line mt-3 divide-y">
+            {data?.map((a) => (
+              <li key={a.id} className="flex items-center justify-between py-3 text-sm">
+                <span className="text-ink font-medium">{a.display_name}</span>
+                <span className="text-muted">@{a.username}</span>
+              </li>
+            ))}
+            {!data?.length && <li className={`${adminUi.faint} py-3`}>暂无管理员</li>}
+          </ul>
         </div>
-        <div className="space-y-2 rounded-lg border bg-white p-4">
-          <h3 className="font-medium">修改我的密码</h3>
-          <input
-            type="password"
-            value={oldPassword}
-            onChange={(e) => setOldPassword(e.target.value)}
-            placeholder="旧密码"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="新密码"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="确认新密码"
-            className="w-full rounded border px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => changePwd.mutate()}
-            className="rounded bg-slate-800 px-3 py-2 text-sm text-white"
-          >
-            保存密码
-          </button>
+
+        <div className="space-y-5">
+          <div className={`${adminUi.panelPad} space-y-3`}>
+            <h3 className={adminUi.sectionTitle}>创建管理员</h3>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="账号"
+              className={adminUi.input}
+            />
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="显示名"
+              className={adminUi.input}
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="密码"
+              className={adminUi.input}
+            />
+            <button type="button" onClick={() => create.mutate()} className={adminUi.btnPrimary}>
+              创建
+            </button>
+          </div>
+          <div className={`${adminUi.panelPad} space-y-3`}>
+            <h3 className={adminUi.sectionTitle}>修改我的密码</h3>
+            <input
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              placeholder="旧密码"
+              className={adminUi.input}
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="新密码"
+              className={adminUi.input}
+            />
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="确认新密码"
+              className={adminUi.input}
+            />
+            <button type="button" onClick={() => changePwd.mutate()} className={adminUi.btnInk}>
+              保存密码
+            </button>
+          </div>
         </div>
       </div>
     </div>

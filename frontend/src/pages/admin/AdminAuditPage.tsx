@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 
 export default function AdminAuditPage() {
@@ -11,36 +13,43 @@ export default function AdminAuditPage() {
   })
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800">操作日志</h2>
-      <div className="overflow-hidden rounded-lg border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
+    <div className={adminUi.page}>
+      <AdminPageHeader title="操作日志" description="管理员关键操作的审计追踪，便于回溯。" />
+      <div className={adminUi.tableWrap}>
+        <table className="w-full text-left">
+          <thead className={adminUi.thead}>
             <tr>
-              <th className="px-3 py-2">管理员</th>
-              <th className="px-3 py-2">动作</th>
-              <th className="px-3 py-2">目标</th>
-              <th className="px-3 py-2">详情</th>
-              <th className="px-3 py-2">时间</th>
+              {['管理员', '动作', '目标', '详情', '时间'].map((h) => (
+                <th key={h} className={adminUi.th}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {data?.items.map((row) => (
-              <tr key={row.id} className="border-t">
-                <td className="px-3 py-2">{row.admin_username}</td>
-                <td className="px-3 py-2">{row.action}</td>
-                <td className="px-3 py-2">
+              <tr key={row.id} className="hover:bg-soft/60 transition-colors">
+                <td className={adminUi.td}>{row.admin_username}</td>
+                <td className={adminUi.td}>
+                  <span className={adminUi.badgeBrand}>{row.action}</span>
+                </td>
+                <td className={adminUi.td}>
                   {row.target_type} {row.target_id}
                 </td>
-                <td className="max-w-xs truncate px-3 py-2">{row.detail}</td>
-                <td className="px-3 py-2 text-slate-500">{row.created_at}</td>
+                <td className={`${adminUi.td} max-w-xs truncate`}>{row.detail}</td>
+                <td className={`${adminUi.td} text-muted`}>{row.created_at}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="flex gap-2 text-sm">
-        <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border px-2 py-1 disabled:opacity-40">
+      <div className="text-muted flex gap-2 text-sm">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => setPage((p) => p - 1)}
+          className={adminUi.btnGhost}
+        >
           上一页
         </button>
         <span>共 {data?.total ?? 0} 条</span>
@@ -48,7 +57,7 @@ export default function AdminAuditPage() {
           type="button"
           disabled={!data || page * data.page_size >= data.total}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
+          className={adminUi.btnGhost}
         >
           下一页
         </button>

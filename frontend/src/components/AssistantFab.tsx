@@ -79,7 +79,7 @@ export default function AssistantFab() {
           <div className="border-line flex items-center justify-between border-b px-4 py-3">
             <div>
               <p className="text-ink text-sm font-semibold">工作台智能客服</p>
-              <p className="text-muted text-xs">只答本站使用问题</p>
+              <p className="text-muted text-xs">本站使用助手 · 生图 / 充值 / 积分 / 批量等</p>
             </div>
             <button type="button" className="text-muted text-sm" onClick={() => setOpen(false)}>
               关闭
@@ -87,9 +87,14 @@ export default function AssistantFab() {
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {messages.length === 0 && (
-              <p className="text-muted text-sm">
-                试试问：生成图片在哪？文案怎么计费？怎么升钻石会员？
-              </p>
+              <div className="text-muted space-y-1.5 text-sm">
+                <p>可以问我例如：</p>
+                <p>· 生成的图片在哪里找？</p>
+                <p>· 怎么充值兑换积分？</p>
+                <p>· 文案生成扣多少分？</p>
+                <p>· 批量结果如何打包下载？</p>
+                <p>· 怎么升级到钻石会员？</p>
+              </div>
             )}
             {messages.map((msg, index) => (
               <div

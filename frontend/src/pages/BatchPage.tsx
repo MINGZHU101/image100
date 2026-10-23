@@ -156,8 +156,29 @@ function Compose() {
 function Watch({ runId }: { runId: string }) {
   const { data, live, isError } = useBatch(runId)
   const pack = useExportBatch(runId)
-  const done = live.status && isTerminal(live.status)
-  const succeeded = data?.items.filter((item) => item.status === 'succeeded').length ?? 0
+  const items = data?.items ?? []
+  const total = items.length
+  const succeeded = items.filter((item) => item.status === 'succeeded').length
+  const failed = items.filter((item) => item.status === 'failed').length
+  // 以整批 items 为准；旧任务无 items 时回退到单 run 终态
+  const done =
+    total > 0
+      ? items.every((item) => item.status === 'succeeded' || item.status === 'failed')
+      : Boolean(live.status && isTerminal(live.status))
+  const stage =
+    data?.run.stage ||
+    live.stage ||
+    (done ? '完成' : '处理中')
+  const progress =
+    total > 0
+      ? Math.round(
+          items.reduce((sum, item) => {
+            if (item.status === 'succeeded' || item.status === 'failed') return sum + 100
+            if (item.status === 'running') return sum + 50
+            return sum
+          }, 0) / total,
+        )
+      : live.progress
 
   const download = () =>
     pack.mutate(undefined, {
@@ -189,11 +210,13 @@ function Watch({ runId }: { runId: string }) {
         <div>
           <h1 className="text-ink text-2xl font-semibold tracking-tight">批量进度</h1>
           <p className="text-muted mt-1 text-sm">
-            {live.stage || '处理中'}
-            {done ? '' : ` · ${live.progress}%`}
+            {stage}
+            {total > 0 ? ` · ${succeeded}/${total} 张成功` : ''}
+            {failed > 0 ? ` · ${failed} 张失败` : ''}
+            {done ? '' : ` · ${progress}%`}
           </p>
           {!done && (
-            <ProgressBar value={live.progress} className="mt-2 h-0.5 w-64 rounded-full" />
+            <ProgressBar value={progress} className="mt-2 h-0.5 w-64 rounded-full" />
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -214,13 +237,21 @@ function Watch({ runId }: { runId: string }) {
         </div>
       </div>
 
-      {live.error && <p className="text-danger mb-3 text-sm">{live.error}</p>}
+      {(data?.run.error || live.error) && (
+        <p className="text-danger mb-3 text-sm">{data?.run.error || live.error}</p>
+      )}
       {pack.isError && <p className="text-danger mb-3 text-sm">{errorMessage(pack.error)}</p>}
 
+      {total === 0 && done && (
+        <p className="text-muted mb-4 text-sm">
+          该任务没有明细（多为修复前的旧记录）。请新建批量任务。
+        </p>
+      )}
+
       <ul className="space-y-3">
-        {(data?.items ?? []).map((item) => (
+        {items.map((item) => (
           <li
-            key={item.source.id}
+            key={item.run_id ?? item.source.id}
             className="border-line bg-paper flex items-center gap-4 rounded-[16px] border p-3"
           >
             <img

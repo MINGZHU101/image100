@@ -45,7 +45,12 @@ def rebuild_index() -> dict:
         raise FileNotFoundError(f"教程不存在: {path}")
 
     text = path.read_text(encoding="utf-8")
-    splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=80)
+    # 按 Markdown 标题优先切分，保证 FAQ / 充值等小节完整入库
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=700,
+        chunk_overlap=120,
+        separators=["\n## ", "\n### ", "\n\n", "\n", "。", "；", " "],
+    )
     docs = splitter.create_documents([text], metadatas=[{"source": str(_GUIDE_REL)}])
 
     # 先删旧集合
@@ -78,10 +83,16 @@ def rebuild_index() -> dict:
 
 
 def ensure_index() -> None:
-    """启动或首次问答时：无标记则建索引。"""
+    """启动或首次问答时建索引；教程文件更新后自动重建。"""
     settings = get_settings()
-    marker = settings.rag_root / ".built"
-    if marker.exists() and guide_path().exists():
+    guide = guide_path()
+    if not guide.exists():
         return
-    if guide_path().exists():
-        rebuild_index()
+    marker = settings.rag_root / ".built"
+    if marker.exists():
+        try:
+            if guide.stat().st_mtime <= marker.stat().st_mtime:
+                return
+        except OSError:
+            pass
+    rebuild_index()

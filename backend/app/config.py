@@ -1,5 +1,6 @@
 """应用配置：统一从环境变量 / 项目根 .env 读取，禁止业务代码散落 os.getenv。"""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -7,8 +8,28 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-# backend/app/config.py → 项目根目录（含 .env / data）
-ROOT_DIR = Path(__file__).resolve().parents[2]
+# backend/app/config.py → backend 目录
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def _resolve_project_root() -> Path:
+    """
+    解析项目根（含 docs / .env）。
+    - 本地：backend 的上一级
+    - Docker：可设 PROJECT_ROOT；或把 docs 放在 backend 同级目录
+    """
+    override = os.getenv("PROJECT_ROOT", "").strip()
+    if override:
+        return Path(override).resolve()
+    parent = _BACKEND_DIR.parent
+    if (parent / "docs").is_dir():
+        return parent
+    if (_BACKEND_DIR / "docs").is_dir():
+        return _BACKEND_DIR
+    return parent
+
+
+ROOT_DIR = _resolve_project_root()
 
 _DEFAULT_CORS = "http://localhost:7301,http://127.0.0.1:7301"
 

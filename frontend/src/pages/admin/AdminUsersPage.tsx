@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import AdminPageHeader from '@/components/admin/AdminPageHeader'
+import { adminUi } from '@/components/admin/adminStyles'
 import { adminApi } from '@/api/admin'
 import { errorMessage } from '@/hooks/useAuth'
 import { toast } from '@/stores/toasts'
@@ -78,77 +80,78 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <h2 className="mr-auto text-lg font-semibold text-slate-800">用户管理</h2>
-        <input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value)
-            setPage(1)
-          }}
-          placeholder="搜索账号/用户名"
-          className="rounded border border-slate-300 px-3 py-1.5 text-sm"
-        />
-        <select
-          value={tier}
-          onChange={(e) => {
-            setTier(e.target.value)
-            setPage(1)
-          }}
-          className="rounded border border-slate-300 px-2 py-1.5 text-sm"
-        >
-          <option value="">全部会员</option>
-          {['青铜', '白银', '黄金', '铂金', '钻石'].map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={exportCsv}
-          className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white"
-        >
-          导出 CSV
-        </button>
-      </div>
+    <div className={adminUi.page}>
+      <AdminPageHeader
+        title="用户管理"
+        description="检索用户、调整积分与余额、冻结账号或强制下线。"
+        actions={
+          <>
+            <input
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setPage(1)
+              }}
+              placeholder="搜索账号/用户名"
+              className={adminUi.inputInline}
+            />
+            <select
+              value={tier}
+              onChange={(e) => {
+                setTier(e.target.value)
+                setPage(1)
+              }}
+              className={adminUi.select}
+            >
+              <option value="">全部会员</option>
+              {['青铜', '白银', '黄金', '铂金', '钻石'].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={exportCsv} className={adminUi.btnInk}>
+              导出 CSV
+            </button>
+          </>
+        }
+      />
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
+      <div className={adminUi.tableWrap}>
+        <table className="w-full text-left">
+          <thead className={adminUi.thead}>
             <tr>
-              <th className="px-3 py-2 font-medium">账号</th>
-              <th className="px-3 py-2 font-medium">用户名</th>
-              <th className="px-3 py-2 font-medium">会员</th>
-              <th className="px-3 py-2 font-medium">余额</th>
-              <th className="px-3 py-2 font-medium">积分</th>
-              <th className="px-3 py-2 font-medium">状态</th>
-              <th className="px-3 py-2 font-medium">操作</th>
+              {['账号', '用户名', '会员', '余额', '积分', '状态', '操作'].map((h) => (
+                <th key={h} className={adminUi.th}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-slate-400">
+                <td colSpan={7} className={`${adminUi.td} text-faint`}>
                   加载中…
                 </td>
               </tr>
             )}
             {data?.items.map((u) => (
-              <tr key={u.id} className="border-t border-slate-100">
-                <td className="px-3 py-2">{u.account}</td>
-                <td className="px-3 py-2">{u.display_name}</td>
-                <td className="px-3 py-2">{u.member_tier}</td>
-                <td className="px-3 py-2 tabular-nums">¥{u.wallet_balance}</td>
-                <td className="px-3 py-2 tabular-nums">{u.points_balance}</td>
-                <td className="px-3 py-2">{u.is_frozen ? '冻结' : '正常'}</td>
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    className="text-teal-700 hover:underline"
-                    onClick={() => setSelected(u.id)}
-                  >
+              <tr key={u.id} className="hover:bg-soft/60 transition-colors">
+                <td className={adminUi.td}>{u.account}</td>
+                <td className={adminUi.td}>{u.display_name}</td>
+                <td className={adminUi.td}>
+                  <span className={adminUi.badgeBrand}>{u.member_tier}</span>
+                </td>
+                <td className={`${adminUi.td} tabular-nums`}>¥{u.wallet_balance}</td>
+                <td className={`${adminUi.td} tabular-nums`}>{u.points_balance}</td>
+                <td className={adminUi.td}>
+                  <span className={u.is_frozen ? adminUi.badgeWarn : adminUi.badgeOk}>
+                    {u.is_frozen ? '冻结' : '正常'}
+                  </span>
+                </td>
+                <td className={adminUi.td}>
+                  <button type="button" className={adminUi.btnLink} onClick={() => setSelected(u.id)}>
                     详情
                   </button>
                 </td>
@@ -158,12 +161,12 @@ export default function AdminUsersPage() {
         </table>
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-slate-600">
+      <div className="text-muted flex items-center gap-2 text-sm">
         <button
           type="button"
           disabled={page <= 1}
           onClick={() => setPage((p) => p - 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
+          className={adminUi.btnGhost}
         >
           上一页
         </button>
@@ -174,79 +177,68 @@ export default function AdminUsersPage() {
           type="button"
           disabled={!data || page * data.page_size >= data.total}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded border px-2 py-1 disabled:opacity-40"
+          className={adminUi.btnGhost}
         >
           下一页
         </button>
       </div>
 
       {selected && detail.data && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className={`${adminUi.panelPad} animate-fade-in`}>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className="font-medium text-slate-800">
-                {detail.data.user.display_name}（{detail.data.user.account}）
+              <h3 className="text-ink font-semibold">
+                {detail.data.user.display_name}
+                <span className="text-muted ml-2 font-normal">（{detail.data.user.account}）</span>
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="text-muted mt-1 text-sm">
                 积分 {detail.data.user.points_balance} · 余额 ¥{detail.data.user.wallet_balance} ·{' '}
                 {detail.data.user.is_frozen ? '已冻结' : '正常'}
               </p>
             </div>
-            <button type="button" className="text-sm text-slate-500" onClick={() => setSelected(null)}>
+            <button type="button" className={adminUi.btnGhost} onClick={() => setSelected(null)}>
               关闭
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap items-end gap-2">
-            <label className="text-xs text-slate-500">
+          <div className="mt-4 flex flex-wrap items-end gap-2">
+            <label className="text-muted text-xs">
               积分变动
               <input
                 value={pointsDelta}
                 onChange={(e) => setPointsDelta(e.target.value)}
-                className="ml-1 w-20 rounded border px-2 py-1 text-sm"
+                className={`${adminUi.inputInline} ml-1 w-20`}
               />
             </label>
-            <button
-              type="button"
-              onClick={() => adjustPoints.mutate()}
-              className="rounded bg-teal-700 px-3 py-1.5 text-sm text-white"
-            >
+            <button type="button" onClick={() => adjustPoints.mutate()} className={adminUi.btnPrimary}>
               调积分
             </button>
-            <label className="text-xs text-slate-500">
+            <label className="text-muted text-xs">
               余额变动
               <input
                 value={walletDelta}
                 onChange={(e) => setWalletDelta(e.target.value)}
-                className="ml-1 w-20 rounded border px-2 py-1 text-sm"
+                className={`${adminUi.inputInline} ml-1 w-20`}
               />
             </label>
-            <button
-              type="button"
-              onClick={() => adjustWallet.mutate()}
-              className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
-            >
+            <button type="button" onClick={() => adjustWallet.mutate()} className={adminUi.btnInk}>
               调余额
             </button>
-            <label className="text-xs text-slate-500">
+            <label className="text-muted text-xs">
               备注
               <input
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
-                className="ml-1 w-40 rounded border px-2 py-1 text-sm"
+                className={`${adminUi.inputInline} ml-1 w-40`}
               />
             </label>
             <button
               type="button"
               onClick={() => freeze.mutate(!detail.data.user.is_frozen)}
-              className="rounded border border-amber-600 px-3 py-1.5 text-sm text-amber-700"
+              className={adminUi.btnDanger}
             >
               {detail.data.user.is_frozen ? '解冻' : '冻结'}
             </button>
-            <button
-              type="button"
-              onClick={() => forceLogout.mutate()}
-              className="rounded border px-3 py-1.5 text-sm"
-            >
+            <button type="button" onClick={() => forceLogout.mutate()} className={adminUi.btnGhost}>
               强制下线
             </button>
           </div>

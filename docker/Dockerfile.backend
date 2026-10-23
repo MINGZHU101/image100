@@ -1,0 +1,36 @@
+# image100 后端：API / ARQ Worker 共用镜像
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PROJECT_ROOT=/app \
+    LOCAL_STORAGE_DIR=/app/data \
+    RAG_PERSIST_DIR=/app/data/rag_chroma
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    libjpeg62-turbo \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/pyproject.toml backend/alembic.ini ./
+COPY backend/app ./app
+COPY backend/migrations ./migrations
+COPY backend/scripts ./scripts
+COPY docs ./docs
+COPY docker/entrypoint-backend.sh /entrypoint-backend.sh
+
+RUN chmod +x /entrypoint-backend.sh \
+    && pip install --upgrade pip \
+    && pip install -e .
+
+RUN mkdir -p /app/data
+
+EXPOSE 7302
+
+ENTRYPOINT ["/entrypoint-backend.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7302"]

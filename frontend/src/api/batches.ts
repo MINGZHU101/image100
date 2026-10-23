@@ -5,9 +5,11 @@ import type { BatchOp } from '@/lib/batch'
 
 export type BatchItem = {
   source: Asset
-  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  status: 'pending' | 'queued' | 'running' | 'succeeded' | 'failed'
   error: string | null
   outputs: Asset[]
+  session_id?: string
+  run_id?: string
 }
 
 export type Batch = {
@@ -35,7 +37,7 @@ export const batchesApi = {
 }
 
 async function downloadZip(id: string): Promise<ExportPack> {
-  const response = await fetch(`/api/batches/${id}/export`)
+  const response = await fetch(`/api/batches/${id}/export`, { credentials: 'include' })
   if (!response.ok) throw await apiError(response, '打包失败')
   const encoded = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(
     response.headers.get('Content-Disposition') ?? '',

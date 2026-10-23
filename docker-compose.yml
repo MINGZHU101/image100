@@ -1,0 +1,146 @@
+# image100 一键启动（虚拟机 / 本机 Docker）
+# 用法：在项目根目录执行
+#   docker compose up -d --build
+#
+# 浏览器打开：http://<主机IP>:7301/
+# 演示账号：demo / demo123 ；管理端：admin / admin123456
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: image100-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retouch
+      POSTGRES_PASSWORD: retouch_dev
+      POSTGRES_DB: retouch
+    ports:
+      - "7311:5432"
+    volumes:
+      - image100_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retouch -d retouch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: image100-redis
+    restart: unless-stopped
+    ports:
+      - "7312:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: image100-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      PROJECT_ROOT: /app
+      API_PORT: "7302"
+      DATABASE_URL: postgresql+asyncpg://retouch:retouch_dev@postgres:5432/retouch
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:7301,http://127.0.0.1:7301}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-cos}
+      LOCAL_STORAGE_DIR: /app/data
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-10485760}
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_REGION: ${COS_REGION:-ap-shanghai}
+      COS_BUCKET: ${COS_BUCKET:-}
+      JWT_SECRET: ${JWT_SECRET:-docker-dev-secret-change-me}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
+      MATTING_PROVIDER: ${MATTING_PROVIDER:-mock}
+      PLANNER_PROVIDER: ${PLANNER_PROVIDER:-dashscope}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      PLANNER_MODEL: ${PLANNER_MODEL:-qwen-plus}
+      VISION_MODEL: ${VISION_MODEL:-qwen3-vl-plus}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v3}
+      RAG_PERSIST_DIR: /app/data/rag_chroma
+      RAG_COLLECTION: ${RAG_COLLECTION:-workbench_guide}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-dashscope}
+      TEXT_TO_IMAGE_MODEL: ${TEXT_TO_IMAGE_MODEL:-qwen-image-2.0-pro-2026-06-22}
+      TEXT_TO_IMAGE_MODELS: ${TEXT_TO_IMAGE_MODELS:-qwen-image-2.0-pro-2026-06-22,qwen-image-3.0-pro}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-image100}
+    ports:
+      - "7302:7302"
+    volumes:
+      - image100_data:/app/data
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7302"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: image100-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      PROJECT_ROOT: /app
+      SKIP_MIGRATIONS: "1"
+      DATABASE_URL: postgresql+asyncpg://retouch:retouch_dev@postgres:5432/retouch
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-cos}
+      LOCAL_STORAGE_DIR: /app/data
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-10485760}
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_REGION: ${COS_REGION:-ap-shanghai}
+      COS_BUCKET: ${COS_BUCKET:-}
+      JWT_SECRET: ${JWT_SECRET:-docker-dev-secret-change-me}
+      MATTING_PROVIDER: ${MATTING_PROVIDER:-mock}
+      PLANNER_PROVIDER: ${PLANNER_PROVIDER:-dashscope}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      PLANNER_MODEL: ${PLANNER_MODEL:-qwen-plus}
+      VISION_MODEL: ${VISION_MODEL:-qwen3-vl-plus}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v3}
+      RAG_PERSIST_DIR: /app/data/rag_chroma
+      RAG_COLLECTION: ${RAG_COLLECTION:-workbench_guide}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-dashscope}
+      TEXT_TO_IMAGE_MODEL: ${TEXT_TO_IMAGE_MODEL:-qwen-image-2.0-pro-2026-06-22}
+      TEXT_TO_IMAGE_MODELS: ${TEXT_TO_IMAGE_MODELS:-qwen-image-2.0-pro-2026-06-22,qwen-image-3.0-pro}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-image100}
+    volumes:
+      - image100_data:/app/data
+    command: ["arq", "app.worker.WorkerSettings"]
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: image100-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "7301:80"
+
+volumes:
+  image100_pgdata:
+  image100_data:
